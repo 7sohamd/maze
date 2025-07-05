@@ -55,9 +55,21 @@ async function classifySabotage(userText: string) {
 export async function POST(request: NextRequest) {
   try {
     const { description } = await request.json();
-    if (!description || !GEMINI_API_KEY) {
-      return NextResponse.json({ error: "Missing description or Gemini API key" }, { status: 400 });
+    
+    // Debug logging
+    console.log("Received description:", description);
+    console.log("GEMINI_API_KEY exists:", !!GEMINI_API_KEY);
+    console.log("GEMINI_API_KEY length:", GEMINI_API_KEY?.length);
+    
+    if (!description) {
+      return NextResponse.json({ error: "Missing description" }, { status: 400 });
     }
+    
+    if (!GEMINI_API_KEY) {
+      console.error("GEMINI_API_KEY is not set in environment variables");
+      return NextResponse.json({ error: "Gemini API key not configured" }, { status: 500 });
+    }
+    
     let sabotageId;
     try {
       sabotageId = await classifySabotage(description);
