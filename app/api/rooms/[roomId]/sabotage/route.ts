@@ -125,3 +125,84 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Failed to process sabotage" }, { status: 500 })
   }
 }
+
+// Add a check endpoint to validate sabotage before transaction
+export async function check(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
+  try {
+    const { roomId } = await params;
+    const { action } = await request.json();
+    const roomRef = doc(db, "rooms", roomId);
+    const roomSnap = await getDoc(roomRef);
+    if (!roomSnap.exists()) {
+      return NextResponse.json({ allowed: false, reason: "Game not found or not active" }, { status: 404 });
+    }
+    const gameState = roomSnap.data();
+    switch (action) {
+      case "slow":
+        if (gameState.timeLeft <= 0) {
+          return NextResponse.json({ allowed: false, reason: "Cannot slow, time is already zero." });
+        }
+        if (gameState.timeLeft <= 15) {
+          return NextResponse.json({ allowed: false, reason: "Cannot slow, less than 15 seconds left." });
+        }
+        break;
+      case "block": {
+        let maze = gameState.maze;
+        if (typeof maze === "string") maze = JSON.parse(maze);
+        const { x: px, y: py } = gameState.player;
+        const { x: gx, y: gy } = gameState.goal;
+        // Use the same path logic as in POST
+        const path = findShortestPath(maze, gameState.obstacles, px, py, gx, gy);
+        let blockCell = null;
+        if (path && path.length >= 2) {
+          blockCell = path[Math.min(2, path.length - 1)];
+        } else if (path && path.length > 0) {
+          blockCell = path[path.length - 1];
+        }
+        if (blockCell) {
+          // Simulate adding the obstacle and check if a path still exists
+          const newObstacles = [...gameState.obstacles, { x: blockCell.x, y: blockCell.y }];
+          const newPath = findShortestPath(maze, newObstacles, px, py, gx, gy);
+          if (!newPath || newPath.length === 0) {
+            return NextResponse.json({ allowed: false, reason: "Blocking this path would leave no way to the goal." });
+          }
+        } else {
+          return NextResponse.json({ allowed: false, reason: "No valid cell to block." });
+        }
+        break;
+      }
+      case "damage":
+        if (gameState.player.health <= 30) {
+          return NextResponse.json({ allowed: false, reason: "Player health is too low to damage further." });
+        }
+        break;
+      case "enemy": {
+        let maze = gameState.maze;
+        if (typeof maze === "string") maze = JSON.parse(maze);
+        const { x: px, y: py } = gameState.player;
+        const { x: gx, y: gy } = gameState.goal;
+        const path = findShortestPath(maze, gameState.obstacles.concat(gameState.enemies), px, py, gx, gy);
+        let enemyCell = null;
+        if (path && path.length >= 2) {
+          for (let i = 1; i < Math.min(3, path.length); i++) {
+            const cell = path[i];
+            if ((cell.x !== px || cell.y !== py) && (cell.x !== gx || cell.y !== gy)) {
+              enemyCell = cell;
+              break;
+            }
+          }
+          if (!enemyCell) enemyCell = path[Math.min(2, path.length - 1)];
+        } else if (path && path.length > 0) {
+          enemyCell = path[path.length - 1];
+        }
+        if (!enemyCell || (enemyCell.x === px && enemyCell.y === py) || (enemyCell.x === gx && enemyCell.y === gy)) {
+          return NextResponse.json({ allowed: false, reason: "No valid cell to spawn enemy." });
+        }
+        break;
+      }
+    }
+    return NextResponse.json({ allowed: true });
+  } catch (error) {
+    return NextResponse.json({ allowed: false, reason: "Failed to check sabotage." }, { status: 500 });
+  }
+}

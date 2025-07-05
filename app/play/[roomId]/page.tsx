@@ -200,74 +200,46 @@ export default function GamePage() {
   // Game loop function - ROBUST VERSION
   const updateGame = useCallback(async () => {
     if (!gameState || gameState.gameStatus !== "playing" || isProcessingMovementRef.current) {
-      return
+      return;
     }
-
-    // Check if we have any movement in the queue
-    if (movementQueueRef.current.length === 0) return
-
-    const now = Date.now()
-    const timeSinceLastMove = now - (lastMoveTimeRef.current || 0)
-    
-    // Movement delay for controlled movement
-    if (timeSinceLastMove < 200) return
-
-    // Get the next movement from queue
-    const movement = movementQueueRef.current.shift()!
-    
-    // Check if this movement would be opposite to the last movement (prevent backward movement)
+    if (movementQueueRef.current.length === 0) return;
+    const now = Date.now();
+    const timeSinceLastMove = now - (lastMoveTimeRef.current || 0);
+    if (timeSinceLastMove < 50) return;
+    const movement = movementQueueRef.current.shift()!;
     if (lastMovement) {
-      const isOpposite = (movement.x !== 0 && movement.x === -lastMovement.x) || 
-                        (movement.y !== 0 && movement.y === -lastMovement.y)
+      const isOpposite = (movement.x !== 0 && movement.x === -lastMovement.x) ||
+                        (movement.y !== 0 && movement.y === -lastMovement.y);
       if (isOpposite) {
-        // Skip this movement to prevent backward movement
-        return
+        return;
       }
     }
-
-    // Set processing flag to prevent overlapping movements
-    isProcessingMovementRef.current = true
-    setIsMoving(true)
-    lastMoveTimeRef.current = now
-
+    isProcessingMovementRef.current = true;
+    setIsMoving(true);
+    lastMoveTimeRef.current = now;
     // Parse maze for collision detection
-    let maze: number[][] = gameState.maze as any
+    let maze: number[][] = gameState.maze as any;
     if (typeof maze === "string") {
       try {
-        maze = JSON.parse(maze)
+        maze = JSON.parse(maze);
       } catch (e) {
-        isProcessingMovementRef.current = false
-        setIsMoving(false)
-        return
+        isProcessingMovementRef.current = false;
+        setIsMoving(false);
+        return;
       }
     }
-
     // Check for wall/obstacle before moving
-    const newX = gameState.player.x + movement.x
-    const newY = gameState.player.y + movement.y
+    const newX = gameState.player.x + movement.x;
+    const newY = gameState.player.y + movement.y;
     const hitWall =
       newX < 0 ||
       newX >= maze[0].length ||
       newY < 0 ||
       newY >= maze.length ||
       maze[newY][newX] === 1 ||
-      gameState.obstacles.some((obs) => obs.x === newX && obs.y === newY)
-
+      gameState.obstacles.some((obs) => obs.x === newX && obs.y === newY);
     if (!hitWall) {
-      // Update last movement
-      setLastMovement(movement)
-
-      // Optimistic update for immediate visual feedback
-      setGameState((prev) =>
-        prev
-          ? {
-              ...prev,
-              player: { ...prev.player, x: newX, y: newY },
-            }
-          : prev,
-      )
-
-      // Send movement to server (non-blocking)
+      // Only update after server confirmation
       fetch(`/api/rooms/${roomId}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -275,31 +247,28 @@ export default function GamePage() {
       })
         .then((response) => {
           if (response.ok) {
-            return response.json()
+            return response.json();
           }
-          throw new Error("Move failed")
+          throw new Error("Move failed");
         })
         .then((newState) => {
-          // Update with server state (includes health, score, etc.)
-          setGameState(newState)
+          setGameState(newState);
+          setLastMovement(movement);
         })
         .catch((error) => {
-          console.log("Move sync error:", error)
-          // Keep optimistic update if server fails
+          console.log("Move sync error:", error);
         })
         .finally(() => {
-          // Reset processing flags after movement completes
           setTimeout(() => {
-            isProcessingMovementRef.current = false
-            setIsMoving(false)
-          }, 100)
-        })
+            isProcessingMovementRef.current = false;
+            setIsMoving(false);
+          }, 10);
+        });
     } else {
-      // Reset processing flags if we hit a wall
-      isProcessingMovementRef.current = false
-      setIsMoving(false)
+      isProcessingMovementRef.current = false;
+      setIsMoving(false);
     }
-  }, [gameState, roomId, lastMovement])
+  }, [gameState, roomId, lastMovement]);
 
   // Game loop - ULTRA SMOOTH VERSION
   useEffect(() => {
@@ -721,15 +690,15 @@ export default function GamePage() {
 
   // Smooth timer update every 50ms for more responsive display
   useEffect(() => {
-    if (gameState?.gameStatus !== "playing") return
+    if (gameState?.gameStatus !== "playing") return;
     const interval = setInterval(() => {
       if (baseTimeLeftRef.current != null && lastUpdateRef.current != null) {
-        const elapsed = Math.floor((Date.now() - lastUpdateRef.current) / 1000)
-        setDisplayTimeLeft(Math.max(0, baseTimeLeftRef.current - elapsed))
+        const elapsed = Math.floor((Date.now() - lastUpdateRef.current) / 1000);
+        setDisplayTimeLeft(Math.max(0, baseTimeLeftRef.current - elapsed));
       }
-    }, 50)
-    return () => clearInterval(interval)
-  }, [gameState?.gameStatus])
+    }, 50);
+    return () => clearInterval(interval);
+  }, [gameState?.gameStatus]);
 
   // Presence system
   useEffect(() => {
@@ -884,26 +853,26 @@ export default function GamePage() {
         </div>
 
         {/* Main Celebration Card */}
-        <div className={`relative bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500 p-8 rounded-3xl shadow-2xl text-center max-w-md mx-4 border-4 border-white/30 backdrop-blur-sm transition-all duration-1000 ${stopBounce ? '' : 'animate-bounce'}`}>
+        <div className={`relative bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500 p-8 rounded-3xl shadow-2xl text-center max-w-md mx-4 border-4 border-white/30 backdrop-blur-sm`}>
           {/* Glowing border effect */}
-          <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 blur-xl opacity-50 animate-pulse"></div>
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 blur-xl opacity-50"></div>
           
           {/* Content */}
           <div className="relative z-10">
-            {/* Trophy Icon with Animation */}
-            <div className={`text-8xl mb-6 ${stopBounce ? '' : 'animate-bounce'}`} style={{ animationDuration: '2s' }}>
+            {/* Trophy Icon */}
+            <div className={`text-8xl mb-6`} style={{ animationDuration: '2s' }}>
               🏆
             </div>
             
             {/* Victory Text */}
-            <h1 className="text-4xl font-black text-white mb-4 drop-shadow-2xl animate-pulse">
+            <h1 className="text-4xl font-black text-white mb-4">
               VICTORY!
             </h1>
             
             {/* Score Display */}
             <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
               <div className="text-white/90 text-lg mb-2">Final Score</div>
-              <div className="text-5xl font-black text-white drop-shadow-lg">
+              <div className="text-5xl font-black text-white">
                 {gameState?.player.score || 0}
               </div>
             </div>
@@ -911,7 +880,7 @@ export default function GamePage() {
             {/* Health Remaining */}
             <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
               <div className="text-white/90 text-lg mb-2">Health Remaining</div>
-              <div className="text-3xl font-bold text-green-400 drop-shadow-lg">
+              <div className="text-3xl font-bold text-green-400">
                 ❤️ {gameState?.player.health || 0}
               </div>
             </div>
@@ -933,25 +902,17 @@ export default function GamePage() {
             </div>
             
             {/* Celebration Message */}
-            <div className="mt-6 text-white/90 text-sm animate-pulse">
+            <div className="mt-6 text-white">
               🎉 Amazing job! You conquered the maze! 🎉
             </div>
           </div>
         </div>
 
         {/* Floating Celebration Elements */}
-        <div className="absolute top-10 left-10 text-4xl animate-bounce" style={{ animationDelay: '0.5s' }}>
-          🎊
-        </div>
-        <div className="absolute top-20 right-20 text-3xl animate-bounce" style={{ animationDelay: '1s' }}>
-          ⭐
-        </div>
-        <div className="absolute bottom-20 left-20 text-3xl animate-bounce" style={{ animationDelay: '1.5s' }}>
-          🎈
-        </div>
-        <div className="absolute bottom-10 right-10 text-4xl animate-bounce" style={{ animationDelay: '2s' }}>
-          🎊
-        </div>
+        <div className="absolute top-10 left-10 text-4xl">🎊</div>
+        <div className="absolute top-20 right-20 text-3xl">⭐</div>
+        <div className="absolute bottom-20 left-20 text-3xl">🎈</div>
+        <div className="absolute bottom-10 right-10 text-4xl">🎊</div>
       </div>
     )
   }

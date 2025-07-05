@@ -106,3 +106,13 @@ body, html {
 .bg-blended-gradient {
   background: linear-gradient(135deg, #031112 0%, #0d464a 100%);
 }
+
+@keyframes fadeout {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.animate-fadeout {
+  animation: fadeout 3.5s ease;
+  opacity: 0;
+  transition: opacity 3.5s;
+}

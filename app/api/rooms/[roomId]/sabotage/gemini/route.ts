@@ -48,7 +48,9 @@ async function classifySabotage(userText: string) {
     throw new Error("Failed to classify sabotage");
   }
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  console.log("Gemini API response:", JSON.stringify(data));
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (text) text = text.toLowerCase();
   return text;
 }
 
@@ -75,9 +77,16 @@ export async function POST(request: NextRequest) {
       sabotageId = await classifySabotage(description);
     } catch (err) {
       console.error("Gemini classify error", err);
-      return NextResponse.json({ error: "Failed to classify sabotage" }, { status: 500 });
+      // Fallback: simple keyword match
+      const desc = description.toLowerCase();
+      if (desc.includes("enemy")) sabotageId = "enemy";
+      else if (desc.includes("block")) sabotageId = "block";
+      else if (desc.includes("slow")) sabotageId = "slow";
+      else if (desc.includes("damage") || desc.includes("health")) sabotageId = "damage";
+      else sabotageId = undefined;
     }
-    const match = SABOTAGES.find(s => s.id === sabotageId);
+    // Robust id match
+    const match = SABOTAGES.find(s => s.id === sabotageId?.trim());
     if (!match) {
       return NextResponse.json({ error: "No sabotage matches your description." }, { status: 404 });
     }

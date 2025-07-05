@@ -556,9 +556,25 @@ export default function WatchPage() {
       setSabotageMessage("Player wallet not found for this room.");
       return;
     }
+    // 1. Check with backend if sabotage is allowed
+    const checkRes = await fetch(`/api/rooms/${roomId}/sabotage/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: action.id }),
+    });
+    const checkData = await checkRes.json();
+    if (!checkData.allowed) {
+      setSabotageMessage(checkData.reason || "This sabotage is not allowed.");
+      // Optionally block the button for a few seconds
+      setBlockedSabotages(prev => ({ ...prev, [action.id]: true }));
+      setTimeout(() => {
+        setBlockedSabotages(prev => ({ ...prev, [action.id]: false }));
+      }, 5000);
+      return;
+    }
     setSabotageMessage("Paying and sabotaging...");
     try {
-      // 1. Pay the sabotage amount to the player's wallet
+      // 2. Pay the sabotage amount to the player's wallet
       const payload = {
         type: "entry_function_payload",
         function: "0x1::coin::transfer",
@@ -577,7 +593,7 @@ export default function WatchPage() {
         setSabotageMessage("Transaction not confirmed. Sabotage cancelled.");
         return;
       }
-      // 2. Call backend to apply sabotage effect
+      // 3. Call backend to apply sabotage effect
       const res = await fetch(`/api/rooms/${roomId}/sabotage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

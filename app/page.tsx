@@ -1,16 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Volume2, VolumeX } from "lucide-react"
 
 export default function LandingPage() {
   const router = useRouter()
   const [showOptions, setShowOptions] = useState(false)
   const [showCredits, setShowCredits] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [hasMounted, setHasMounted] = useState(false)
+  const [showFade, setShowFade] = useState(true)
+
+  useEffect(() => {
+    setHasMounted(true)
+    // Fade out the overlay after a short delay
+    const timeout = setTimeout(() => setShowFade(false), 800)
+    return () => clearTimeout(timeout)
+  }, [])
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.muted = muted
+    }
+  }, [muted])
 
   return (
     <>
+      {/* Black fade-in overlay */}
+      {showFade && (
+        <div className="fixed inset-0 z-50 bg-black animate-fadeout pointer-events-none" />
+      )}
       {/* Full-page background GIF */}
       <div
         className="fixed inset-0 -z-10"
@@ -31,6 +53,19 @@ export default function LandingPage() {
         className="absolute left-1/2 top-1/4 -translate-x-1/2 -translate-y-1/2 w-128 h-128 object-contain drop-shadow-xl select-none pointer-events-none animate-pulse"
         draggable="false"
       />
+      {/* Background music and speaker button only on client */}
+      {hasMounted && (
+        <>
+          <audio ref={audioRef} src="/background.mp3" autoPlay loop hidden />
+          <button
+            className="fixed bottom-8 right-8 z-20 bg-black/60 rounded-full p-4 shadow-lg hover:bg-black/80 transition-colors"
+            onClick={() => setMuted((m) => !m)}
+            aria-label={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? <VolumeX className="w-8 h-8 text-white" /> : <Volume2 className="w-8 h-8 text-white" />}
+          </button>
+        </>
+      )}
       <section
         className="fixed bottom-0 left-0 m-8 z-10 flex flex-col items-start p-10 bg-black/0 rounded-2xl shadow-2xl text-left"
         style={{ minWidth: 340 }}
