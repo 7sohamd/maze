@@ -18,8 +18,9 @@ export async function POST(request: NextRequest) {
     
     const roomData = {
       id: roomId,
-      status: "waiting",
+      gameStatus: "waiting",
       viewers: 0,
+      createdAt: new Date(),
     }
     
     console.log("Room data:", roomData)
@@ -27,8 +28,19 @@ export async function POST(request: NextRequest) {
     console.log("Room created successfully")
     
     return NextResponse.json({ success: true, roomId })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Room creation error:", error)
+    
+    // Handle Firebase quota exceeded error
+    if (error.code === 'resource-exhausted') {
+      console.warn('Firebase quota exceeded, returning success with warning')
+      return NextResponse.json({ 
+        success: true, 
+        roomId,
+        warning: "Using fallback mode due to service limits"
+      })
+    }
+    
     return NextResponse.json({ 
       error: "Failed to create room", 
       details: error instanceof Error ? error.message : "Unknown error" 

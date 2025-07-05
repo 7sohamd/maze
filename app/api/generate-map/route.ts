@@ -96,22 +96,37 @@ function generateMaze(width: number, height: number, extraConnections = 10): num
   return maze
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url)
+    const difficulty = searchParams.get('difficulty') || 'medium'
+    
+    // Difficulty-based maze settings
+    const mazeSettings = {
+      easy: { width: 25, height: 20, extraConnections: 25 }, // Smaller, more open maze
+      medium: { width: 35, height: 25, extraConnections: 18 }, // Standard maze
+      hard: { width: 40, height: 28, extraConnections: 12 } // Large but manageable maze
+    }
+    
+    const settings = mazeSettings[difficulty as keyof typeof mazeSettings] || mazeSettings.medium
+    
     // Use odd dimensions for proper maze generation
-    const width = 35 // Odd number, bigger maze
-    const height = 25 // Odd number, bigger maze
+    const width = settings.width
+    const height = settings.height
 
-    // Easy mode: add extra connections for multiple paths
-    const maze = generateMaze(width, height, 18) // 18 extra connections
+    // Generate maze based on difficulty
+    const maze = generateMaze(width, height, settings.extraConnections)
 
     // Fixed positions
     const playerStart = { x: 1, y: 1 }
     const goal = { x: width - 2, y: height - 2 }
 
-    // Generate enemies in open spaces
+    // Generate enemies based on difficulty
+    const enemyCounts = { easy: 2, medium: 3, hard: 4 }
+    const enemyCount = enemyCounts[difficulty as keyof typeof enemyCounts] || 3
+    
     const enemies = []
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < enemyCount; i++) {
       let x, y
       let attempts = 0
       do {
@@ -119,7 +134,10 @@ export async function GET() {
         y = Math.floor(Math.random() * (height - 4)) + 2
         attempts++
       } while (
-        (maze[y][x] === 1 || (x === playerStart.x && y === playerStart.y) || (x === goal.x && y === goal.y)) &&
+        (maze[y][x] === 1 || 
+         (x === playerStart.x && y === playerStart.y) || 
+         (x === goal.x && y === goal.y) ||
+         enemies.some(enemy => Math.abs(enemy.x - x) < 3 && Math.abs(enemy.y - y) < 3)) && // Keep enemies spread out
         attempts < 50
       )
 

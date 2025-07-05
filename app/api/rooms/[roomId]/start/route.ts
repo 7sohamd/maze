@@ -5,25 +5,55 @@ import { doc, setDoc } from "firebase/firestore"
 // In-memory storage
 // const rooms = new Map<string, any>()
 
-export async function POST(request: NextRequest, { params }: { params: { roomId: string } }) {
-  const roomId = params.roomId;
+export async function POST(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
+  const { roomId } = await params;
   try {
     console.log("Game start request for room:", roomId)
     
-    const mapResponse = await fetch(`${request.nextUrl.origin}/api/generate-map`)
+    const body = await request.json()
+    const difficulty = body.difficulty || 'medium'
+    
+    // Difficulty settings
+    const difficultySettings = {
+      easy: {
+        enemyCount: 2,
+        enemySpeed: 1,
+        enemyChaseRate: 0.6,
+        playerHealth: 150,
+        timeLimit: 180,
+      },
+      medium: {
+        enemyCount: 3,
+        enemySpeed: 2,
+        enemyChaseRate: 0.75,
+        playerHealth: 100,
+        timeLimit: 120,
+      },
+      hard: {
+        enemyCount: 4,
+        enemySpeed: 3,
+        enemyChaseRate: 0.9,
+        playerHealth: 75,
+        timeLimit: 90,
+      }
+    }
+    
+    const settings = difficultySettings[difficulty as keyof typeof difficultySettings] || difficultySettings.medium
+    
+    const mapResponse = await fetch(`${request.nextUrl.origin}/api/generate-map?difficulty=${difficulty}`)
     if (!mapResponse.ok) {
       console.error("Failed to generate map:", mapResponse.status)
       return NextResponse.json({ error: "Failed to generate map" }, { status: 500 })
     }
     
     const mapData = await mapResponse.json()
-    console.log("Map generated successfully")
+    console.log("Map generated successfully for difficulty:", difficulty)
     
     const gameState = {
       player: {
         x: Number(mapData.playerStart.x),
         y: Number(mapData.playerStart.y),
-        health: 100,
+        health: settings.playerHealth,
         speed: 1.0,
         score: 0,
       },
@@ -41,7 +71,9 @@ export async function POST(request: NextRequest, { params }: { params: { roomId:
       gameStatus: "playing" as const,
       viewers: 0,
       lastUpdate: Date.now(),
-      timeLeft: 120,
+      timeLeft: settings.timeLimit,
+      difficulty: difficulty,
+      difficultySettings: settings,
     }
     
     console.log("Game state created, updating room:", roomId)
@@ -56,11 +88,15 @@ export async function POST(request: NextRequest, { params }: { params: { roomId:
       gameStatus: gameState.gameStatus,
       viewers: gameState.viewers,
       lastUpdate: gameState.lastUpdate,
-      timeLeft: gameState.timeLeft
+      timeLeft: gameState.timeLeft,
+      difficulty: gameState.difficulty,
+      difficultySettings: gameState.difficultySettings,
+      createdAt: new Date()
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))
-    await setDoc(roomRef, firestoreData)
+    // Use setDoc with merge option to handle existing rooms
+    await setDoc(roomRef, firestoreData, { merge: true })
     console.log("Game started successfully")
     
     return NextResponse.json(gameState)

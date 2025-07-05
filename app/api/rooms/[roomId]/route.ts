@@ -2,14 +2,18 @@ import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 
-export async function GET(request: NextRequest, { params }: { params: { roomId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const roomRef = doc(db, "rooms", roomId);
     const roomSnap = await getDoc(roomRef);
     
     if (!roomSnap.exists()) {
-      return NextResponse.json({ error: "Room not found" }, { status: 404 });
+      // Return a waiting state instead of 404
+      return NextResponse.json({ 
+        gameStatus: "waiting",
+        message: "Room not initialized yet"
+      });
     }
     
     return NextResponse.json(roomSnap.data());

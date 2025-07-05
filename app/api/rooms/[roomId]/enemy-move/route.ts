@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 
-// Enemy movement function that can be called independently
+// Enemy movement function
 function moveEnemies(gameState: any, maze: number[][]) {
   const player = gameState.player
   const difficultySettings = gameState.difficultySettings || { enemyChaseRate: 0.75, enemySpeed: 2 }
@@ -80,102 +80,57 @@ function moveEnemies(gameState: any, maze: number[][]) {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
   try {
-    const movement = await request.json()
     const roomRef = doc(db, "rooms", roomId)
     const roomSnap = await getDoc(roomRef)
     if (!roomSnap.exists()) {
-      return NextResponse.json({ error: "Game not found" }, { status: 404 })
+      // Return success but with no action if room doesn't exist yet
+      return NextResponse.json({ status: "waiting" })
     }
+    
     const gameState = roomSnap.data()
     
-    // Validate game state
-    if (!gameState || !gameState.player || !gameState.maze) {
-      return NextResponse.json({ error: "Invalid game state" }, { status: 400 })
+    // Only move enemies if game is still playing and has required data
+    if (!gameState || gameState.gameStatus !== "playing" || !gameState.enemies || !gameState.player) {
+      return NextResponse.json(gameState || { error: "Invalid game state" })
     }
     
-    const player = gameState.player
     // Parse maze if it's a string
     let maze = gameState.maze
     if (typeof maze === "string") {
-      try {
-        maze = JSON.parse(maze)
-      } catch (e) {
-        return NextResponse.json({ error: "Invalid maze data" }, { status: 400 })
-      }
+      maze = JSON.parse(maze)
     }
-    const newX = player.x + movement.x
-    const newY = player.y + movement.y
-    // Check bounds, walls, and obstacles
-    if (
-      newX < 0 ||
-      newX >= maze[0].length ||
-      newY < 0 ||
-      newY >= maze.length ||
-      maze[newY][newX] === 1 ||
-      (gameState.obstacles && gameState.obstacles.some((obs: any) => obs.x === newX && obs.y === newY))
-    ) {
-      // Invalid move: out of bounds, wall, or obstacle
-      return NextResponse.json(gameState)
-    }
-    // Valid move
-    player.x = newX
-    player.y = newY
-    // Track last movement direction
-    gameState.lastMove = { x: movement.x, y: movement.y }
-
-    // Decrement timer (pause if won)
-    if (typeof gameState.timeLeft === "number" && gameState.gameStatus !== "won") {
-      const now = Date.now();
-      const lastUpdate = gameState.lastUpdate || now;
-      const elapsed = Math.floor((now - lastUpdate) / 1000);
-      if (elapsed > 0) {
-        gameState.timeLeft = Math.max(0, gameState.timeLeft - elapsed);
-        if (gameState.timeLeft === 0) {
-          gameState.gameStatus = "lost";
-        }
-      }
-      gameState.lastUpdate = now;
-    }
-
-    // Check for goal
-    if (player.x === gameState.goal.x && player.y === gameState.goal.y) {
-      gameState.gameStatus = "won";
-      player.score += 1000;
-    }
-
-    // Check for enemy collision - IMPROVED DETECTION
+    
+    // Move enemies aggressively
+    moveEnemies(gameState, maze)
+    
+    // Check for enemy collision with player - IMPROVED DETECTION
     const hitEnemy = gameState.enemies.some(
       (enemy: any) => {
-        const distance = Math.abs(enemy.x - player.x) + Math.abs(enemy.y - player.y);
+        const distance = Math.abs(enemy.x - gameState.player.x) + Math.abs(enemy.y - gameState.player.y);
         return distance === 0; // Direct collision
       }
     );
     
     if (hitEnemy) {
-      console.log("Enemy collision detected in move! Player health before:", player.health);
-      player.health = Math.max(0, player.health - 25);
-      console.log("Player health after collision:", player.health);
+      console.log("Enemy collision detected! Player health before:", gameState.player.health);
+      gameState.player.health = Math.max(0, gameState.player.health - 25);
+      console.log("Player health after collision:", gameState.player.health);
       
-      if (player.health <= 0) {
+      if (gameState.player.health <= 0) {
         gameState.gameStatus = "lost";
         console.log("Game over - player health depleted");
       }
     }
-
-    // Move enemies more aggressively with smarter movement and higher speed
-    moveEnemies(gameState, maze)
     
     await updateDoc(roomRef, {
-      player: gameState.player,
       enemies: gameState.enemies,
-      gameStatus: gameState.gameStatus,
-      timeLeft: gameState.timeLeft,
-      lastUpdate: gameState.lastUpdate,
-      lastMove: gameState.lastMove
+      player: gameState.player,
+      gameStatus: gameState.gameStatus
     })
+    
     return NextResponse.json(gameState)
   } catch (error: any) {
-    console.error("Move error:", error)
+    console.error("Enemy move error:", error)
     
     // Handle Firebase quota exceeded error
     if (error.code === 'resource-exhausted') {
@@ -186,6 +141,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
     }
     
-    return NextResponse.json({ error: "Failed to process move" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to move enemies" }, { status: 500 })
   }
-}
+} 
