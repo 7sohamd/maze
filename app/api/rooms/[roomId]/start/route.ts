@@ -93,7 +93,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       viewers: existingViewers, // Preserve existing viewer count
       lastUpdate: Date.now(),
       timeLeft: 120,
-      playerWallet
     }
     
     console.log("Game state created, updating room:", roomId)
@@ -118,7 +117,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       viewers: gameState.viewers,
       lastUpdate: gameState.lastUpdate,
       timeLeft: gameState.timeLeft,
-      playerWallet: gameState.playerWallet
+      playerWallet, // Store the player's wallet address
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))
