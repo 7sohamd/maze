@@ -98,7 +98,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     let maze = gameState.maze
     if (typeof maze === "string") {
       try {
-        maze = JSON.parse(maze)
+      maze = JSON.parse(maze)
       } catch (e) {
         return NextResponse.json({ error: "Invalid maze data" }, { status: 400 })
       }
