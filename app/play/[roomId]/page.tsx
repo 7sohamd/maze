@@ -55,38 +55,16 @@ export default function GamePage() {
   const movementQueueRef = useRef<Array<{x: number, y: number}>>([])
   const isProcessingMovementRef = useRef(false)
 
-  // Wallet connect UI as a variable, not an early return
-  const walletConnectUI = (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-purple-900 via-pink-900 to-red-900">
-      <Card className="w-full max-w-md bg-gray-900 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white press-start-bold text-2xl mb-2">Connect Your Petra Wallet</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={playerWallet.connect}
-            disabled={playerWallet.loading}
-            className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-2 rounded-lg text-lg press-start-bold mb-2"
-          >
-            {playerWallet.loading ? "Connecting..." : "🔗 Connect Petra Wallet"}
-          </Button>
-          {playerWallet.error && (
-            <div className="text-red-400 text-sm mt-2">{playerWallet.error}</div>
-          )}
-          <div className="text-gray-400 text-xs mt-4">You must connect your Petra wallet to play the game.</div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-
-  // Only run game logic if wallet is connected
+  // Initialize game
   useEffect(() => {
-    if (!playerWallet.isConnected || !playerWallet.address) return;
     const initGame = async () => {
+      if (!playerWallet.isConnected) return; // Block until wallet is connected
       try {
         console.log("Initializing game for room:", roomId)
+        
         // Try to start the game directly - the start API will create the room if needed
         console.log("Starting game for room:", roomId)
+        
         const response = await fetch(`/api/rooms/${roomId}/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -97,6 +75,7 @@ export default function GamePage() {
         })
         console.log("Start response status:", response.status)
         console.log("Start response headers:", Object.fromEntries(response.headers.entries()))
+        
         if (response.ok) {
           const initialState = await response.json()
           console.log("Game state received:", initialState)
@@ -120,8 +99,9 @@ export default function GamePage() {
         setLoading(false)
       }
     }
+
     initGame()
-  }, [roomId, router, difficulty, playerWallet.isConnected, playerWallet.address])
+  }, [roomId, router, playerWallet.isConnected, playerWallet.address])
 
   // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
@@ -976,9 +956,19 @@ export default function GamePage() {
     )
   }
 
-  // Render wallet connect UI if not connected, else render game
   if (!playerWallet.isConnected) {
-    return walletConnectUI;
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-pulse">🦊</div>
+          <div className="text-white text-2xl font-bold mb-4">Connect your Petra Wallet to play</div>
+          <Button onClick={playerWallet.connect} disabled={playerWallet.loading}>
+            {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
+          </Button>
+          {playerWallet.error && <div className="text-red-500 mt-2">{playerWallet.error}</div>}
+        </div>
+      </div>
+    )
   }
 
   if (loading) {

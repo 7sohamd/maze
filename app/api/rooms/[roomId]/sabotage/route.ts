@@ -112,7 +112,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         break;
       }
     }
-    console.log(`[SABOTAGE] Before update:`, JSON.stringify({ player: gameState.player, enemies: gameState.enemies, obstacles: gameState.obstacles, gameStatus: gameState.gameStatus, timeLeft: gameState.timeLeft }, null, 2));
     await updateDoc(roomRef, {
       player: gameState.player,
       enemies: gameState.enemies,
@@ -120,7 +119,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       gameStatus: gameState.gameStatus,
       timeLeft: gameState.timeLeft
     })
-    console.log(`[SABOTAGE] After update for room ${roomId}`);
     return NextResponse.json(gameState)
   } catch (error) {
     console.error("Sabotage error:", error)
