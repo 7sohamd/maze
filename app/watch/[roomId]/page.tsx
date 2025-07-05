@@ -51,6 +51,29 @@ async function waitForAptosTx(txHash: string, maxAttempts = 20, interval = 1000)
   return false;
 }
 
+// Helper functions to check if sabotage is possible
+function canBlockPath(gameState: any) {
+  // Only allow if there is a path from player to goal and not too many obstacles
+  if (!gameState || !gameState.maze || !gameState.player || !gameState.goal) return false;
+  let maze = gameState.maze;
+  if (typeof maze === "string") {
+    try { maze = JSON.parse(maze); } catch { return false; }
+  }
+  // Simple check: less than 1/4 of maze cells are obstacles
+  const maxObstacles = Math.floor((maze.length * maze[0].length) / 4);
+  return (gameState.obstacles?.length || 0) < maxObstacles;
+}
+function canDamage(gameState: any) {
+  return gameState?.player?.health > 0;
+}
+function canSpawnEnemy(gameState: any) {
+  // Only allow if less than N enemies (e.g., 10)
+  return (gameState?.enemies?.length || 0) < 10;
+}
+function canSlow(gameState: any) {
+  return gameState?.timeLeft > 0;
+}
+
 export default function WatchPage() {
   const params = useParams()
   const router = useRouter()
@@ -563,6 +586,12 @@ export default function WatchPage() {
       if (!res.ok) {
         const data = await res.json();
         setSabotageMessage("Payment succeeded but sabotage failed: " + (data.error || res.statusText));
+        // Block this sabotage button for 5 seconds
+        setBlockedSabotages(prev => ({ ...prev, [action.id]: true }));
+        setTimeout(() => {
+          setBlockedSabotages(prev => ({ ...prev, [action.id]: false }));
+        }, 5000);
+        return;
       } else {
         setSabotageMessage("Sabotage sent after payment!");
       }
@@ -941,27 +970,7 @@ export default function WatchPage() {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-gray-800 border-gray-700">
-                <CardHeader>
-                  <CardTitle className="text-white press-start-bold">Player Wallet Address</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <input
-                    type="text"
-                    className="w-full mb-2 p-2 rounded bg-gray-900 border border-gray-700 text-white press-start-bold"
-                    placeholder="Enter player wallet address (0x...)"
-                    value={playerWallet || ''}
-                    onChange={e => setPlayerWallet(e.target.value)}
-                  />
-                  <Button
-                    onClick={initializePlayerAccount}
-                    disabled={initLoading}
-                    className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-2 rounded-lg text-sm press-start-bold"
-                  >
-                    {initLoading ? "🤖 Initializing..." : "🎯 Initialize Player Account"}
-                  </Button>
-                </CardContent>
-              </Card>
+              
               {/* Wallet Connect and Recipient Address */}
               <div className="mb-4 flex flex-col gap-2">
                 {!petraWallet.isConnected ? (
@@ -1024,14 +1033,19 @@ export default function WatchPage() {
                     </Button>
                   </div>
                   {sabotageActions.map((action) => {
-                    const onCooldown = cooldowns[action.id] > 0
-                    const disabled = onCooldown || !petraWallet.isConnected || gameState.gameStatus !== "playing"
+                    const onCooldown = cooldowns[action.id] > 0;
+                    let logicPossible = true;
+                    if (action.id === "block") logicPossible = canBlockPath(gameState);
+                    if (action.id === "damage") logicPossible = canDamage(gameState);
+                    if (action.id === "enemy") logicPossible = canSpawnEnemy(gameState);
+                    if (action.id === "slow") logicPossible = canSlow(gameState);
+                    const disabled = onCooldown || !petraWallet.isConnected || gameState.gameStatus !== "playing" || !logicPossible;
                     return (
                       <Button
                         key={action.id}
                         onClick={() => handleSabotage(action)}
                         disabled={disabled || blockedSabotages[action.id]}
-                        className={`w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:text-gray-400 text-left justify-start p-3 h-auto ${blockedSabotages[action.id] ? 'opacity-50 cursor-not-allowed' : ''} press-start-bold`}
+                        className={`self-stretch w-full text-left font-bold text-lg press-start-bold mb-2 ${blockedSabotages[action.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <div className="flex items-center gap-3 w-full">
                           <span className="text-2xl">{action.icon}</span>
@@ -1047,7 +1061,7 @@ export default function WatchPage() {
                           </div>
                         </div>
                       </Button>
-                    )
+                    );
                   })}
                 </CardContent>
               </Card>
