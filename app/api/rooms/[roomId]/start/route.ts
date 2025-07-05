@@ -10,12 +10,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     console.log("Game start request for room:", roomId)
     
-    // Accept playerWallet from request body
-    const body = await request.json().catch(() => ({}));
+    // Accept playerWallet and difficulty from request body
+    const body = await request.json();
     const playerWallet = body.playerWallet || null;
-    
-    const body = await request.json()
-    const difficulty = body.difficulty || 'medium'
+    const difficulty = body.difficulty || 'medium';
     
     // Difficulty settings
     const difficultySettings = {
@@ -61,7 +59,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         speed: 1.0,
         score: 0,
       },
-      enemies: mapData.enemies.map(enemy => ({
+      enemies: mapData.enemies.map((enemy: any) => ({
         id: enemy.id,
         x: Number(enemy.x),
         y: Number(enemy.y)
