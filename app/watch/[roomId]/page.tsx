@@ -105,6 +105,7 @@ export default function WatchPage() {
         if (response.ok) {
           const state = await response.json()
           console.log("Game state received:", state)
+          console.log(`[Watch] Received viewer count: ${state.viewers}`)
           
           // Handle waiting state - show waiting message but don't set gameState to null
           if (state.gameStatus === "waiting") {
@@ -138,7 +139,24 @@ export default function WatchPage() {
     // Register presence for this viewer
     const registerPresence = async () => {
       try {
-        const response = await fetch(`/api/rooms/${roomId}/presence`, { method: "POST" })
+        const headers: HeadersInit = {};
+        
+        // Check if this viewer has already registered for this room using localStorage
+        const registrationKey = `viewer_registered_${roomId}`;
+        const hasRegistered = localStorage.getItem(registrationKey);
+        
+        if (!hasRegistered) {
+          headers["x-new-viewer"] = "true";
+          localStorage.setItem(registrationKey, "true");
+          console.log(`[Watch] Registering as new viewer for room: ${roomId}`)
+        } else {
+          console.log(`[Watch] Re-registering presence for room: ${roomId}`)
+        }
+        
+        const response = await fetch(`/api/rooms/${roomId}/presence`, { 
+          method: "POST",
+          headers
+        })
         if (response.ok) {
           console.log("Presence registered successfully for room:", roomId)
         }
@@ -150,13 +168,16 @@ export default function WatchPage() {
     pollGameState()
     registerPresence()
     const interval = setInterval(pollGameState, 100) // Ultra-fast polling for real-time viewing
-    const presenceInterval = setInterval(registerPresence, 15000) // Register presence every 15s
+    const presenceInterval = setInterval(registerPresence, 30000) // Register presence every 30s (reduced from 15s)
 
     return () => {
       clearInterval(interval)
       clearInterval(presenceInterval)
       // Unregister presence when leaving
       fetch(`/api/rooms/${roomId}/presence`, { method: "DELETE" }).catch(console.error)
+      // Clean up localStorage registration
+      const registrationKey = `viewer_registered_${roomId}`;
+      localStorage.removeItem(registrationKey);
     }
   }, [roomId, router])
 

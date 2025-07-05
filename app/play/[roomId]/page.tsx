@@ -49,6 +49,9 @@ export default function GamePage() {
   const [playerHit, setPlayerHit] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [lastMovement, setLastMovement] = useState<{x: number, y: number} | null>(null)
+  const movementQueueRef = useRef<Array<{x: number, y: number}>>([])
+  const isProcessingMovementRef = useRef(false)
 
   // Initialize game
   useEffect(() => {
@@ -94,7 +97,7 @@ export default function GamePage() {
     initGame()
   }, [roomId, router])
 
-  // Handle keyboard input - SIMPLIFIED VERSION
+  // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle movement keys
@@ -104,12 +107,22 @@ export default function GamePage() {
       e.preventDefault()
       e.stopPropagation()
       
-      // Add key to set
-      setKeys((prev) => {
-        const newKeys = new Set(prev)
-        newKeys.add(e.key)
-        return newKeys
-      })
+      // Convert key to movement direction
+      let movement = { x: 0, y: 0 }
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        movement.x = -1
+      } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        movement.x = 1
+      } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
+        movement.y = -1
+      } else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+        movement.y = 1
+      }
+      
+      // Add to movement queue if it's a valid movement
+      if (movement.x !== 0 || movement.y !== 0) {
+        movementQueueRef.current.push(movement)
+      }
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -120,12 +133,8 @@ export default function GamePage() {
       e.preventDefault()
       e.stopPropagation()
       
-      // Remove key from set
-      setKeys((prev) => {
-        const newKeys = new Set(prev)
-        newKeys.delete(e.key)
-        return newKeys
-      })
+      // Clear movement queue when any key is released
+      movementQueueRef.current = []
     }
 
     // Focus the window to ensure key events are captured
@@ -140,10 +149,13 @@ export default function GamePage() {
     }
   }, [])
 
-  // Add mouse/touch controls - SIMPLIFIED VERSION
+  // Add mouse/touch controls - ROBUST VERSION
   const handleCanvasClick = useCallback(
     async (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!gameState || !canvasRef.current) return
+      if (!gameState || !canvasRef.current || isMoving) return
+
+      // Clear movement queue to prevent conflicts
+      movementQueueRef.current = []
 
       const canvas = canvasRef.current
       const rect = canvas.getBoundingClientRect()
@@ -167,76 +179,11 @@ export default function GamePage() {
       }
 
       if (movement.x !== 0 || movement.y !== 0) {
-        // Parse maze for collision detection
-        let maze: number[][] = gameState.maze as any
-        if (typeof maze === "string") {
-          try {
-            maze = JSON.parse(maze)
-          } catch (e) {
-            return
-          }
-        }
-
-        // Check for wall/obstacle before moving
-        let obstacles = gameState.obstacles || [];
-        const newX = gameState.player.x + movement.x
-        const newY = gameState.player.y + movement.y
-        const hitWall =
-          newX < 0 ||
-          newX >= maze[0].length ||
-          newY < 0 ||
-          newY >= maze.length ||
-          maze[newY][newX] === 1 ||
-          obstacles.some((obs) => obs.x === newX && obs.y === newY)
-
-        if (!hitWall) {
-          // Check if we can move (prevent rapid movement)
-          const now = Date.now()
-          if (now - (lastMoveTimeRef.current || 0) < 50) { // 50ms delay between moves for smoother movement
-            return
-          }
-          
-          // Update last move time
-          lastMoveTimeRef.current = now
-
-          // Send movement to server
-          try {
-            const response = await fetch(`/api/rooms/${roomId}/move`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(movement),
-            })
-            
-            if (response.ok) {
-              const newState = await response.json()
-              setGameState(newState)
-            } else {
-              // If server request failed, still move locally
-              setGameState((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      player: { ...prev.player, x: newX, y: newY },
-                    }
-                  : prev,
-              )
-            }
-          } catch (error) {
-            console.log("Click movement sync error:", error)
-            // Move locally even if server fails
-            setGameState((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    player: { ...prev.player, x: newX, y: newY },
-                  }
-                : prev,
-            )
-          }
-        }
+        // Add to movement queue
+        movementQueueRef.current.push(movement)
       }
     },
-    [gameState, roomId, cellSize],
+    [gameState, roomId, cellSize, isMoving],
   )
 
   // Set client flag after hydration to prevent hydration mismatch
@@ -244,216 +191,237 @@ export default function GamePage() {
     setIsClient(true)
   }, [])
 
-  // Game loop function - ULTRA SMOOTH VERSION
+  // Game loop function - ROBUST VERSION
   const updateGame = useCallback(async () => {
-    if (!gameState || gameState.gameStatus !== "playing") {
-      return
-    }
-    
-    // Only process movement if keys are pressed
-    if (keys.size === 0) {
+    if (!gameState || gameState.gameStatus !== "playing" || isProcessingMovementRef.current) {
       return
     }
 
-    // Parse maze if it's a string
+    // Check if we have any movement in the queue
+    if (movementQueueRef.current.length === 0) return
+
+    const now = Date.now()
+    const timeSinceLastMove = now - (lastMoveTimeRef.current || 0)
+    
+    // Movement delay for controlled movement
+    if (timeSinceLastMove < 200) return
+
+    // Get the next movement from queue
+    const movement = movementQueueRef.current.shift()!
+    
+    // Check if this movement would be opposite to the last movement (prevent backward movement)
+    if (lastMovement) {
+      const isOpposite = (movement.x !== 0 && movement.x === -lastMovement.x) || 
+                        (movement.y !== 0 && movement.y === -lastMovement.y)
+      if (isOpposite) {
+        // Skip this movement to prevent backward movement
+        return
+      }
+    }
+
+    // Set processing flag to prevent overlapping movements
+    isProcessingMovementRef.current = true
+    setIsMoving(true)
+    lastMoveTimeRef.current = now
+
+    // Parse maze for collision detection
     let maze: number[][] = gameState.maze as any
     if (typeof maze === "string") {
       try {
         maze = JSON.parse(maze)
       } catch (e) {
+        isProcessingMovementRef.current = false
+        setIsMoving(false)
         return
       }
     }
 
-    // Check if we can move (prevent rapid movement)
-    const now = Date.now()
-    if (now - (lastMoveTimeRef.current || 0) < 50) { // 50ms delay between moves for smoother movement
-      return
-    }
+    // Check for wall/obstacle before moving
+    const newX = gameState.player.x + movement.x
+    const newY = gameState.player.y + movement.y
+    const hitWall =
+      newX < 0 ||
+      newX >= maze[0].length ||
+      newY < 0 ||
+      newY >= maze.length ||
+      maze[newY][newX] === 1 ||
+      gameState.obstacles.some((obs) => obs.x === newX && obs.y === newY)
 
-    const movement = { x: 0, y: 0 }
-    
-    // Simple priority system: horizontal first, then vertical
-    if (keys.has("ArrowLeft") || keys.has("a") || keys.has("A")) {
-      movement.x = -1
-    } else if (keys.has("ArrowRight") || keys.has("d") || keys.has("D")) {
-      movement.x = 1
-    }
-    
-    if (keys.has("ArrowUp") || keys.has("w") || keys.has("W")) {
-      movement.y = -1
-    } else if (keys.has("ArrowDown") || keys.has("s") || keys.has("S")) {
-      movement.y = 1
-    }
+    if (!hitWall) {
+      // Update last movement
+      setLastMovement(movement)
 
-    // Only move if there's actual movement
-    if (movement.x !== 0 || movement.y !== 0) {
-      // Check for wall/obstacle before moving
-      let obstacles = gameState.obstacles || [];
-      const newX = gameState.player.x + movement.x
-      const newY = gameState.player.y + movement.y
-      const hitWall =
-        newX < 0 ||
-        newX >= maze[0].length ||
-        newY < 0 ||
-        newY >= maze.length ||
-        maze[newY][newX] === 1 ||
-        obstacles.some((obs) => obs.x === newX && obs.y === newY)
-      
-      if (!hitWall) {
-        // Update last move time
-        lastMoveTimeRef.current = now
-        
-        // Set moving state for visual feedback
-        setIsMoving(true)
-        setTimeout(() => setIsMoving(false), 50) // Shorter feedback for smoother feel
-        
-        // Send movement to server
-        try {
-          const response = await fetch(`/api/rooms/${roomId}/move`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(movement),
-          })
-          
+      // Optimistic update for immediate visual feedback
+      setGameState((prev) =>
+        prev
+          ? {
+              ...prev,
+              player: { ...prev.player, x: newX, y: newY },
+            }
+          : prev,
+      )
+
+      // Send movement to server (non-blocking)
+      fetch(`/api/rooms/${roomId}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(movement),
+      })
+        .then((response) => {
           if (response.ok) {
-            const newState = await response.json()
-            setGameState(newState)
-          } else {
-            // If server request failed, still move locally
-            setGameState((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    player: { ...prev.player, x: newX, y: newY },
-                  }
-                : prev,
-            )
+            return response.json()
           }
-        } catch (error) {
-          console.log("Movement sync error:", error)
-          // Move locally even if server fails
-          setGameState((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  player: { ...prev.player, x: newX, y: newY },
-                }
-              : prev,
-          )
-        }
-      }
+          throw new Error("Move failed")
+        })
+        .then((newState) => {
+          // Update with server state (includes health, score, etc.)
+          setGameState(newState)
+        })
+        .catch((error) => {
+          console.log("Move sync error:", error)
+          // Keep optimistic update if server fails
+        })
+        .finally(() => {
+          // Reset processing flags after movement completes
+          setTimeout(() => {
+            isProcessingMovementRef.current = false
+            setIsMoving(false)
+          }, 100)
+        })
+    } else {
+      // Reset processing flags if we hit a wall
+      isProcessingMovementRef.current = false
+      setIsMoving(false)
     }
-  }, [gameState, keys, roomId])
+  }, [gameState, roomId, lastMovement])
 
   // Game loop - ULTRA SMOOTH VERSION
   useEffect(() => {
-    if (gameState?.gameStatus === "playing") {
-      gameLoopRef.current = window.setInterval(updateGame, 16) // 60 FPS for ultra-smooth movement
-    } else {
-      if (gameLoopRef.current) {
-        clearInterval(gameLoopRef.current)
-        gameLoopRef.current = null
-      }
-    }
-    
-    return () => {
-      if (gameLoopRef.current) {
-        clearInterval(gameLoopRef.current)
-        gameLoopRef.current = null
-      }
-    }
-  }, [gameState?.gameStatus, updateGame])
+    if (!gameState) return
 
-  // Poll for sabotage/game events at optimized frequency
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    let enemyMoveInterval: NodeJS.Timeout | null = null;
-    
-    if (gameState?.gameStatus === "playing") {
-      const poll = async () => {
-        try {
-          const response = await fetch(`/api/rooms/${roomId}/state`)
-          if (response.ok) {
-            const serverState = await response.json()
-            // Handle waiting state
-            if (serverState.gameStatus === "waiting") {
-              console.log("Room is waiting for initialization")
-              return
-            }
-            
+    let interval: NodeJS.Timeout | null = null
+    let enemyMoveInterval: NodeJS.Timeout | null = null
+
+    // Ultra-smooth game loop at 60 FPS
+    interval = setInterval(updateGame, 16) // ~60 FPS (1000ms / 60 = 16.67ms)
+
+    // State polling for real-time updates
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${roomId}/state`)
+        if (response.ok) {
+          const newState = await response.json()
+          if (newState && !newState.error) {
             // Check if player got hit (health decreased)
-            if (serverState.player.health < gameState.player.health) {
+            if (gameState && newState.player.health < gameState.player.health) {
               setPlayerHit(true)
               // Reset hit effect after 1 second
               setTimeout(() => setPlayerHit(false), 1000)
             }
-            
-            // Only update if something important changed
-            if (
-              serverState.gameStatus !== gameState.gameStatus ||
-              serverState.player.health !== gameState.player.health ||
-              serverState.enemies.length !== gameState.enemies.length ||
-              serverState.obstacles.length !== gameState.obstacles.length ||
-              serverState.timeLeft !== gameState.timeLeft
-            ) {
-              setGameState(serverState)
-            }
+            setGameState(newState)
           }
-        } catch {}
-      }
-      
-      // Poll every 1 second for important updates (health, enemies, obstacles, timer)
-      interval = setInterval(poll, 1000)
-      
-      // Move enemies independently every 2 seconds for smoother gameplay
-      const moveEnemies = async () => {
-        try {
-          // Only call enemy movement if game is properly initialized
-          if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
-            const response = await fetch(`/api/rooms/${roomId}/enemy-move`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" }
-            })
-            if (response.ok) {
-              const newState = await response.json()
-              if (newState && !newState.error) {
-                setGameState(newState)
-              }
-            }
-          }
-        } catch (error) {
-          console.log("Enemy movement failed:", error)
         }
+      } catch (error) {
+        console.log("State poll error:", error)
       }
-      
-      // Only start enemy movement if game is actually playing and room exists
-      if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
-        enemyMoveInterval = setInterval(moveEnemies, 2000)
+    }
+
+    // Poll state every 500ms for smoother updates
+    const stateInterval = setInterval(poll, 500)
+
+    // Enemy movement
+    const moveEnemies = async () => {
+      try {
+        // Only call enemy movement if game is properly initialized
+        if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
+          const response = await fetch(`/api/rooms/${roomId}/enemy-move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          })
+          if (response.ok) {
+            const newState = await response.json()
+            if (newState && !newState.error) {
+              setGameState(newState)
+            }
+          }
+        }
+      } catch (error) {
+        console.log("Enemy movement failed:", error)
       }
+    }
+    
+    // Only start enemy movement if game is actually playing and room exists
+    if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
+      enemyMoveInterval = setInterval(moveEnemies, 5000) // Reduced from 5000ms to 5000ms (keeping same for now)
     }
     
     return () => {
       if (interval) clearInterval(interval);
       if (enemyMoveInterval) clearInterval(enemyMoveInterval);
+      if (stateInterval) clearInterval(stateInterval);
     };
-  }, [gameState, roomId])
+  }, [gameState, roomId, updateGame])
 
   // Ping counter: measure round-trip time for /api/ping request every 2s
   useEffect(() => {
     let cancelled = false;
+    let consecutiveFailures = 0;
+    const maxFailures = 3;
+    
     const measurePing = async () => {
       const start = Date.now();
       try {
-        await fetch(`/api/ping`, { method: "GET" });
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+        
+        const response = await fetch(`/api/ping`, { 
+          method: "GET",
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        // Validate response
+        const data = await response.json();
+        if (!data.ok || !data.timestamp) {
+          throw new Error("Invalid ping response");
+        }
+        
         const end = Date.now();
-        if (!cancelled) setPing(end - start);
-      } catch {
-        if (!cancelled) setPing(null);
+        const pingTime = end - start;
+        
+        // Reset failure counter on success
+        consecutiveFailures = 0;
+        
+        // Only update ping if it's reasonable (between 1ms and 5 seconds)
+        if (!cancelled && pingTime >= 1 && pingTime < 5000) {
+          setPing(pingTime);
+        } else if (!cancelled) {
+          console.warn(`Ping measurement out of range: ${pingTime}ms, ignoring`);
+          setPing(null);
+        }
+      } catch (error) {
+        consecutiveFailures++;
+        if (!cancelled) {
+          console.warn("Ping measurement failed:", error);
+          
+          // If we have too many consecutive failures, stop showing ping
+          if (consecutiveFailures >= maxFailures) {
+            setPing(null);
+            console.warn("Too many ping failures, hiding ping display");
+          }
+        }
       }
     };
+    
     const interval = setInterval(measurePing, 2000);
-    measurePing();
+    measurePing(); // Initial measurement
+    
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -648,43 +616,62 @@ export default function GamePage() {
     const playerY = gameState.player.y * cellSize + cellSize / 2
     const playerRadius = cellSize / 2 - 2
     
-    // Add shake effect if player was hit, and movement effect
-    const shakeOffset = playerHit ? (Math.random() - 0.5) * 4 : 0
-    const moveOffset = isMoving ? (Math.random() - 0.5) * 2 : 0
+    // Enhanced smooth movement effects
+    const time = Date.now() * 0.01 // Smooth time-based animation
+    const shakeOffset = playerHit ? Math.sin(time * 20) * 3 : 0
+    const moveOffset = isMoving ? Math.sin(time * 30) * 1.5 : 0
+    const pulseScale = isMoving ? 1 + Math.sin(time * 25) * 0.1 : 1
     const finalPlayerX = playerX + shakeOffset + moveOffset
     const finalPlayerY = playerY + shakeOffset + moveOffset
     
-    // Player glow - red if hit, yellow if normal
+    // Enhanced player glow - red if hit, yellow if normal, with pulsing effect
+    const glowIntensity = isMoving ? 25 : (playerHit ? 20 : 15)
     ctx.shadowColor = playerHit ? "#EF4444" : "#FBBF24"
-    ctx.shadowBlur = playerHit ? 20 : 15
+    ctx.shadowBlur = glowIntensity + Math.sin(time * 15) * 5
     
-    // Player body (Pacman shape with mouth) - red if hit
+    // Player body (Pacman shape with mouth) - red if hit, with smooth scaling
     ctx.fillStyle = playerHit ? "#EF4444" : "#FBBF24"
+    ctx.save() // Save current transform
+    ctx.translate(finalPlayerX, finalPlayerY)
+    ctx.scale(pulseScale, pulseScale)
     ctx.beginPath()
-    ctx.arc(finalPlayerX, finalPlayerY, playerRadius, 0.2 * Math.PI, 1.8 * Math.PI)
-    ctx.lineTo(finalPlayerX, finalPlayerY)
+    ctx.arc(0, 0, playerRadius, 0.2 * Math.PI, 1.8 * Math.PI)
+    ctx.lineTo(0, 0)
     ctx.fill()
+    ctx.restore() // Restore transform
     
-    // Player eye
+    // Player eye with smooth movement
     ctx.fillStyle = "#000000"
     ctx.beginPath()
     ctx.arc(finalPlayerX - 2, finalPlayerY - 4, 2, 0, Math.PI * 2)
     ctx.fill()
     
-    // Add hit effect overlay if player was hit
+    // Enhanced hit effect overlay if player was hit
     if (playerHit) {
-      ctx.fillStyle = "rgba(239, 68, 68, 0.3)"
+      const hitPulse = Math.sin(time * 30) * 0.3 + 0.7
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.3 * hitPulse})`
       ctx.beginPath()
       ctx.arc(finalPlayerX, finalPlayerY, playerRadius + 4, 0, Math.PI * 2)
       ctx.fill()
     }
     
-    // Add movement trail effect
+    // Enhanced movement trail effect with smooth fade
     if (isMoving) {
-      ctx.fillStyle = "rgba(251, 191, 36, 0.2)"
+      const trailPulse = Math.sin(time * 25) * 0.2 + 0.3
+      ctx.fillStyle = `rgba(251, 191, 36, ${0.2 * trailPulse})`
       ctx.beginPath()
       ctx.arc(finalPlayerX, finalPlayerY, playerRadius + 6, 0, Math.PI * 2)
       ctx.fill()
+      
+      // Additional movement particles
+      for (let i = 0; i < 3; i++) {
+        const particleOffset = Math.sin(time * 20 + i) * 8
+        const particleAlpha = Math.sin(time * 15 + i) * 0.3 + 0.1
+        ctx.fillStyle = `rgba(251, 191, 36, ${particleAlpha})`
+        ctx.beginPath()
+        ctx.arc(finalPlayerX + particleOffset, finalPlayerY + particleOffset, 2, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
     
     ctx.shadowBlur = 0
@@ -793,46 +780,166 @@ export default function GamePage() {
     }
   }, [gameState?.gameStatus, showCelebration])
 
-  // Celebration Component - SIMPLIFIED VERSION
+  // Celebration Component - SPECTACULAR VERSION
   const CelebrationUI = ({ onClose }: { onClose: () => void }) => {
     const [isClient, setIsClient] = useState(false)
+    const [confetti, setConfetti] = useState<Array<{x: number, y: number, vx: number, vy: number, color: string, size: number}>>([])
+    const [stopBounce, setStopBounce] = useState(false)
     
     // Set client flag after hydration
     useEffect(() => {
       setIsClient(true)
     }, [])
     
-    // Auto-close after 3 seconds
+    // Generate confetti particles only on client
+    useEffect(() => {
+      if (!isClient) return
+      
+      const particles = []
+      const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8']
+      
+      for (let i = 0; i < 100; i++) {
+        particles.push({
+          x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 800),
+          y: -20,
+          vx: (Math.random() - 0.5) * 8,
+          vy: Math.random() * 3 + 2,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          size: Math.random() * 8 + 4
+        })
+      }
+      setConfetti(particles)
+    }, [isClient])
+    
+    // Animate confetti only on client
+    useEffect(() => {
+      if (!isClient) return
+      
+      const interval = setInterval(() => {
+        setConfetti(prev => prev.map(particle => ({
+          ...particle,
+          x: particle.x + particle.vx,
+          y: particle.y + particle.vy,
+          vy: particle.vy + 0.1 // gravity
+        })).filter(particle => particle.y < (typeof window !== 'undefined' ? window.innerHeight : 600) + 50))
+      }, 16)
+      
+      return () => clearInterval(interval)
+    }, [isClient])
+    
+    // Stop card bounce after 3 seconds
+    useEffect(() => {
+      const bounceTimer = setTimeout(() => {
+        setStopBounce(true)
+      }, 3000)
+      
+      return () => clearTimeout(bounceTimer)
+    }, [])
+    
+    // Auto-close after 5 seconds
     useEffect(() => {
       const timer = setTimeout(() => {
         onClose()
-      }, 3000)
+      }, 5000)
       
       return () => clearTimeout(timer)
     }, [onClose])
 
+    // Don't render until client-side
+    if (!isClient) {
+      return null
+    }
+
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-        {/* Simple Celebration Card */}
-        <div className="bg-gradient-to-br from-yellow-400 to-orange-500 p-6 rounded-2xl shadow-xl text-center max-w-sm mx-4 animate-bounce">
-          <div className="text-6xl mb-4">
-            🏆
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm overflow-hidden">
+        {/* Confetti Background */}
+        <div className="absolute inset-0 pointer-events-none">
+          {confetti.map((particle, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full animate-bounce"
+              style={{
+                left: particle.x,
+                top: particle.y,
+                width: particle.size,
+                height: particle.size,
+                backgroundColor: particle.color,
+                boxShadow: `0 0 ${particle.size}px ${particle.color}`,
+                animationDelay: `${Math.random() * 2}s`,
+                animationDuration: `${1 + Math.random()}s`
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Main Celebration Card */}
+        <div className={`relative bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500 p-8 rounded-3xl shadow-2xl text-center max-w-md mx-4 border-4 border-white/30 backdrop-blur-sm transition-all duration-1000 ${stopBounce ? '' : 'animate-bounce'}`}>
+          {/* Glowing border effect */}
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 blur-xl opacity-50 animate-pulse"></div>
+          
+          {/* Content */}
+          <div className="relative z-10">
+            {/* Trophy Icon with Animation */}
+            <div className={`text-8xl mb-6 ${stopBounce ? '' : 'animate-bounce'}`} style={{ animationDuration: '2s' }}>
+              🏆
+            </div>
+            
+            {/* Victory Text */}
+            <h1 className="text-4xl font-black text-white mb-4 drop-shadow-2xl animate-pulse">
+              VICTORY!
+            </h1>
+            
+            {/* Score Display */}
+            <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
+              <div className="text-white/90 text-lg mb-2">Final Score</div>
+              <div className="text-5xl font-black text-white drop-shadow-lg">
+                {gameState?.player.score || 0}
+              </div>
+            </div>
+            
+            {/* Health Remaining */}
+            <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
+              <div className="text-white/90 text-lg mb-2">Health Remaining</div>
+              <div className="text-3xl font-bold text-green-400 drop-shadow-lg">
+                ❤️ {gameState?.player.health || 0}
+              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={onClose}
+                className="bg-white/20 hover:bg-white/30 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 border border-white/30 backdrop-blur-sm"
+              >
+                🎮 Play Again
+              </button>
+              <button
+                onClick={() => router.push("/")}
+                className="bg-white/20 hover:bg-white/30 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 border border-white/30 backdrop-blur-sm"
+              >
+                🏠 Home
+              </button>
+            </div>
+            
+            {/* Celebration Message */}
+            <div className="mt-6 text-white/90 text-sm animate-pulse">
+              🎉 Amazing job! You conquered the maze! 🎉
+            </div>
           </div>
-          
-          <h1 className="text-2xl font-bold text-white mb-2">
-            Victory!
-          </h1>
-          
-          <p className="text-white/90 mb-4">
-            Score: {gameState?.player.score || 0}
-          </p>
-          
-          <button
-            onClick={onClose}
-            className="bg-white/20 hover:bg-white/30 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200"
-          >
-            Continue
-          </button>
+        </div>
+
+        {/* Floating Celebration Elements */}
+        <div className="absolute top-10 left-10 text-4xl animate-bounce" style={{ animationDelay: '0.5s' }}>
+          🎊
+        </div>
+        <div className="absolute top-20 right-20 text-3xl animate-bounce" style={{ animationDelay: '1s' }}>
+          ⭐
+        </div>
+        <div className="absolute bottom-20 left-20 text-3xl animate-bounce" style={{ animationDelay: '1.5s' }}>
+          🎈
+        </div>
+        <div className="absolute bottom-10 right-10 text-4xl animate-bounce" style={{ animationDelay: '2s' }}>
+          🎊
         </div>
       </div>
     )

@@ -1,14 +1,35 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { getFallbackViewerCount, isFirebaseQuotaExceeded } from "../presence/route"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
   try {
+    // Check if Firebase quota is exceeded
+    if (isFirebaseQuotaExceeded()) {
+      console.log(`[State GET] Firebase quota exceeded, using fallback mode for room: ${roomId}`)
+      const fallbackViewers = getFallbackViewerCount(roomId)
+      
+      // Return a basic game state with fallback viewer count
+      return NextResponse.json({ 
+        gameStatus: "playing",
+        viewers: fallbackViewers,
+        timeLeft: 120,
+        player: { x: 1, y: 1, health: 100, speed: 1, score: 0 },
+        enemies: [],
+        obstacles: [],
+        goal: { x: 15, y: 15 },
+        maze: [],
+        fallback: true
+      })
+    }
+    
     const roomRef = doc(db, "rooms", roomId)
     const roomSnap = await getDoc(roomRef)
     if (!roomSnap.exists()) {
       // Return a waiting state instead of 404
+      console.log(`[State GET] Room ${roomId} not found, returning waiting state with 0 viewers`)
       return NextResponse.json({ 
         gameStatus: "waiting",
         message: "Room not initialized yet",
@@ -17,14 +38,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       })
     }
     const gameState = roomSnap.data()
-
-    // Increment viewer count only if x-new-viewer header is present
-    const isNewViewer = request.headers.get("x-new-viewer") === "true";
-    if (isNewViewer) {
-      const newViewerCount = (gameState.viewers || 0) + 1;
-      await updateDoc(roomRef, { viewers: newViewerCount })
-      gameState.viewers = newViewerCount
-    }
+    
+    console.log(`[State GET] Room ${roomId} - viewers: ${gameState.viewers}, status: ${gameState.gameStatus}`)
 
     // Decrement timer
     if (typeof gameState.timeLeft === "number") {
@@ -39,12 +54,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
       gameState.lastUpdate = now;
       
-      // Update the timer in Firestore
-      await updateDoc(roomRef, {
-        timeLeft: gameState.timeLeft,
-        lastUpdate: gameState.lastUpdate,
-        gameStatus: gameState.gameStatus
-      })
+      // Only update Firestore if significant time has passed (reduce Firebase writes)
+      if (elapsed >= 5) { // Only update every 5 seconds to reduce quota usage
+        try {
+          await updateDoc(roomRef, {
+            timeLeft: gameState.timeLeft,
+            lastUpdate: gameState.lastUpdate,
+            gameStatus: gameState.gameStatus
+          })
+        } catch (error: any) {
+          // Handle Firebase quota exceeded error
+          if (error.code === 'resource-exhausted') {
+            console.warn('Firebase quota exceeded, continuing without update')
+            // Continue without updating Firestore
+          } else {
+            throw error // Re-throw other errors
+          }
+        }
+      }
     }
 
     return NextResponse.json(gameState)
@@ -53,12 +80,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     
     // Handle Firebase quota exceeded error
     if (error.code === 'resource-exhausted') {
-      console.warn('Firebase quota exceeded, returning waiting state')
+      console.warn('Firebase quota exceeded, returning fallback state')
+      const fallbackViewers = getFallbackViewerCount(roomId)
+      
       return NextResponse.json({ 
-        gameStatus: "waiting",
-        message: "Service temporarily unavailable",
-        viewers: 0,
-        timeLeft: 0
+        gameStatus: "playing",
+        message: "Using fallback mode due to service limits",
+        viewers: fallbackViewers,
+        timeLeft: 120,
+        player: { x: 1, y: 1, health: 100, speed: 1, score: 0 },
+        enemies: [],
+        obstacles: [],
+        goal: { x: 15, y: 15 },
+        maze: [],
+        fallback: true
       })
     }
     
