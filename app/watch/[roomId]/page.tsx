@@ -6,14 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Eye, Coins, Zap, Mic, Users, Gamepad2 } from "lucide-react"
-
-// TypeScript declarations for Web Speech API
-declare global {
-  interface Window {
-    SpeechRecognition: any
-    webkitSpeechRecognition: any
-  }
-}
+import { usePetraWallet, isValidAptosAddress } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -47,7 +40,7 @@ export default function WatchPage() {
   const roomId = params.roomId as string
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
-  const [balance, setBalance] = useState(1000)
+  const watcherWallet = usePetraWallet();
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [blockedSabotages, setBlockedSabotages] = useState<Record<string, boolean>>({})
@@ -55,15 +48,15 @@ export default function WatchPage() {
   const [geminiInput, setGeminiInput] = useState("")
   const [geminiLoading, setGeminiLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [voiceSupported, setVoiceSupported] = useState(false)
   const [showCelebration, setShowCelebration] = useState(false)
-  const [executingSabotage, setExecutingSabotage] = useState<string | null>(null)
+  const [voiceSupported, setVoiceSupported] = useState(false)
+  const [manualPlayerAddress, setManualPlayerAddress] = useState("")
 
   const sabotageActions: SabotageAction[] = [
     {
       id: "slow",
       name: "Slow Down",
-      cost: 50,
+      cost: 0.05,
       icon: "🐌",
       description: "Reduce speed by 30%",
       cooldown: 10000,
@@ -71,7 +64,7 @@ export default function WatchPage() {
     {
       id: "block",
       name: "Block Path",
-      cost: 75,
+      cost: 0.08,
       icon: "🧱",
       description: "Place obstacle",
       cooldown: 15000,
@@ -79,7 +72,7 @@ export default function WatchPage() {
     {
       id: "damage",
       name: "Damage",
-      cost: 100,
+      cost: 0.1,
       icon: "💔",
       description: "Reduce health",
       cooldown: 12000,
@@ -87,7 +80,7 @@ export default function WatchPage() {
     {
       id: "enemy",
       name: "Spawn Enemy",
-      cost: 125,
+      cost: 0.1,
       icon: "👹",
       description: "Spawn enemy",
       cooldown: 20000,
@@ -413,51 +406,41 @@ export default function WatchPage() {
   }, [gameState])
 
   const executeSabotage = async (action: SabotageAction) => {
-    if (balance < action.cost || cooldowns[action.id] > 0 || blockedSabotages[action.id]) return
-    
-    // Set executing state for visual feedback
-    setExecutingSabotage(action.id)
-    setSabotageMessage(`⚡ Executing ${action.name}...`)
-    
+    setSabotageMessage(null);
+    if (!watcherWallet.isConnected) {
+      setSabotageMessage("Connect your Petra wallet first.");
+      return;
+    }
+    if (!isValidAptosAddress(manualPlayerAddress)) {
+      setSabotageMessage("Player wallet address is invalid.");
+      return;
+    }
     try {
+      // Send APT to player
+      const payload = {
+        type: "entry_function_payload",
+        function: "0x1::coin::transfer",
+        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+        arguments: [manualPlayerAddress, (action.cost * 1e8).toFixed(0)],
+      };
+      await watcherWallet.signAndSubmitTransaction(payload);
+      // After successful transfer, call sabotage API to trigger effect
       const response = await fetch(`/api/rooms/${roomId}/sabotage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: action.id }),
-      })
-      
+      });
       if (response.ok) {
-        // Immediate UI updates
-        setBalance((prev) => prev - action.cost)
-        setCooldowns((prev) => ({ ...prev, [action.id]: action.cooldown }))
-        setSabotageMessage(`✅ ${action.name} executed successfully!`)
-        
-        // Clear success message after 2 seconds
-        setTimeout(() => setSabotageMessage(null), 2000)
-        
-        // Force immediate state refresh
-        setTimeout(() => {
-          fetch(`/api/rooms/${roomId}/state`)
-            .then(res => res.json())
-            .then(state => setGameState(state))
-            .catch(console.error)
-        }, 100)
-        
-      } else if (response.status === 400) {
-        const data = await response.json()
-        setSabotageMessage(data.error || "This sabotage is currently blocked.")
-        setBlockedSabotages((prev) => ({ ...prev, [action.id]: true }))
-        setTimeout(() => setBlockedSabotages((prev) => ({ ...prev, [action.id]: false })), 4000)
+        setCooldowns((prev) => ({ ...prev, [action.id]: action.cooldown }));
+        setSabotageMessage("Sabotage successful!");
       } else {
-        setSabotageMessage("Failed to execute sabotage. Please try again.")
+        const data = await response.json();
+        setSabotageMessage(data.error || "Failed to sabotage.");
       }
-    } catch (error) {
-      setSabotageMessage("Failed to execute sabotage. Please check your connection.")
-    } finally {
-      // Clear executing state
-      setExecutingSabotage(null)
+    } catch (err: any) {
+      setSabotageMessage("Transaction failed: " + (err.message || err));
     }
-  }
+  };
 
   const handleGeminiSabotage = async () => {
     if (!geminiInput.trim()) return
@@ -475,8 +458,6 @@ export default function WatchPage() {
         const action = sabotageActions.find(a => a.id === data.sabotage.id)
         if (!action) {
           setSabotageMessage("Matched sabotage is not available.")
-        } else if (balance < action.cost) {
-          setSabotageMessage("Not enough tokens for this sabotage.")
         } else if (cooldowns[action.id] > 0) {
           setSabotageMessage("This sabotage is on cooldown.")
         } else if (blockedSabotages[action.id]) {
@@ -566,6 +547,23 @@ export default function WatchPage() {
       setTimeout(() => setSabotageMessage(null), 3000)
     }
   }
+
+  useEffect(() => {
+    const fetchPlayerWallet = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/state`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.playerWallet) {
+            setManualPlayerAddress(data.playerWallet);
+          }
+        }
+      } catch (err) {
+        // handle error if needed
+      }
+    };
+    fetchPlayerWallet();
+  }, [roomId]);
 
   if (loading) {
     return (
@@ -713,37 +711,9 @@ export default function WatchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-pink-900 to-red-900 p-4 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute w-3 h-3 bg-pink-400 rounded-full animate-pulse"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${2 + Math.random() * 2}s`
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="relative z-10 max-w-7xl mx-auto">
-        {/* Celebration Notification */}
-        {showCelebration && (
-          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-yellow-400 to-orange-500 text-black p-4 rounded-2xl shadow-2xl animate-bounce">
-            <div className="flex items-center gap-3 font-bold text-xl">
-              <span className="text-3xl">🎉</span>
-              <span>Player Won the Game!</span>
-              <span className="text-3xl">🏆</span>
-            </div>
-          </div>
-        )}
-        
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 bg-black/20 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+    <div className="min-h-screen bg-gray-900 p-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
           <Button
             onClick={() => router.push("/")}
             variant="outline"
@@ -764,10 +734,6 @@ export default function WatchPage() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
               ⏰ {minutes}:{seconds.toString().padStart(2, "0")}
-            </div>
-            <div className="flex items-center gap-2 text-yellow-400 font-bold text-lg bg-gradient-to-r from-yellow-400/20 to-orange-500/20 px-4 py-2 rounded-full border border-yellow-400/30">
-              <Coins className="h-5 w-5" />
-              {balance} tokens
             </div>
           </div>
         </div>
@@ -841,6 +807,46 @@ export default function WatchPage() {
               </CardContent>
             </Card>
 
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white">Player Wallet Address</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <input
+                  type="text"
+                  className="w-full mb-2 p-2 rounded bg-gray-900 border border-gray-700 text-white"
+                  placeholder="Enter player wallet address (0x...)"
+                  value={manualPlayerAddress}
+                  onChange={e => setManualPlayerAddress(e.target.value)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-900 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white">Your Wallet</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {watcherWallet.isConnected ? (
+                  <div>
+                    <div className="text-green-400 font-mono text-xs break-all mb-2">
+                      {watcherWallet.address}
+                    </div>
+                    <Button onClick={watcherWallet.disconnect} className="w-full bg-red-600 hover:bg-red-700 text-white">
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <Button onClick={watcherWallet.connect} className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    Connect Petra Wallet
+                  </Button>
+                )}
+                {watcherWallet.error && (
+                  <div className="text-red-400 text-xs mt-2">{watcherWallet.error}</div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Sabotage Actions */}
             <Card className="bg-red-400/30 backdrop-blur-sm border-red-400/50 shadow-xl">
               <CardHeader>
@@ -890,48 +896,33 @@ export default function WatchPage() {
                     {geminiLoading ? "🤖 Processing..." : "🎯 Execute AI Sabotage"}
                   </Button>
                 </div>
+                {sabotageActions.map((action) => {
+                  const onCooldown = cooldowns[action.id] > 0
+                  const disabled = onCooldown || !watcherWallet.isConnected || gameState.gameStatus !== "playing"
 
-                {/* Quick Sabotage Buttons */}
-                <div className="space-y-3">
-                  {sabotageActions.map((action) => {
-                    const onCooldown = cooldowns[action.id] > 0
-                    const canAfford = balance >= action.cost
-                    const disabled = onCooldown || !canAfford || gameState.gameStatus !== "playing"
-                    const isExecuting = executingSabotage === action.id
-
-                    return (
-                      <Button
-                        key={action.id}
-                        onClick={() => executeSabotage(action)}
-                        disabled={disabled || blockedSabotages[action.id] || isExecuting}
-                        className={`w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 disabled:from-gray-600 disabled:to-gray-700 disabled:text-gray-400 text-left justify-start p-4 h-auto rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 ${blockedSabotages[action.id] ? 'opacity-50 cursor-not-allowed' : ''} ${isExecuting ? 'animate-pulse bg-yellow-500 text-black' : ''}`}
-                      >
-                        <div className="flex items-start gap-3 w-full min-w-0">
-                          <span className="text-3xl flex-shrink-0">
-                            {isExecuting ? '⚡' : action.icon}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-bold text-lg break-words">
-                              {isExecuting ? `Executing ${action.name}...` : action.name}
+                  return (
+                    <Button
+                      key={action.id}
+                      onClick={() => executeSabotage(action)}
+                      disabled={disabled || blockedSabotages[action.id]}
+                      className={`w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:text-gray-400 text-left justify-start p-3 h-auto ${blockedSabotages[action.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-center gap-3 w-full">
+                        <span className="text-2xl">{action.icon}</span>
+                        <div className="flex-1">
+                          <div className="font-semibold">{action.name}</div>
+                          <div className="text-xs opacity-80">{action.description}</div>
+                          <div className="text-xs text-yellow-300">{action.cost} tokens</div>
+                          {onCooldown && (
+                            <div className="text-xs text-red-300">
+                              Cooldown: {Math.ceil(cooldowns[action.id] / 1000)}s
                             </div>
-                            <div className="text-sm opacity-90 break-words leading-relaxed">{action.description}</div>
-                            <div className="text-sm text-yellow-300 font-bold mt-1">{action.cost} tokens</div>
-                            {onCooldown && (
-                              <div className="text-sm text-red-300 font-semibold mt-1">
-                                ⏱️ {Math.ceil(cooldowns[action.id] / 1000)}s cooldown
-                              </div>
-                            )}
-                            {isExecuting && (
-                              <div className="text-sm text-yellow-300 font-semibold mt-1 animate-pulse">
-                                ⚡ Processing...
-                              </div>
-                            )}
-                          </div>
+                          )}
                         </div>
-                      </Button>
-                    )
-                  })}
-                </div>
+                      </div>
+                    </Button>
+                  )
+                })}
               </CardContent>
             </Card>
 

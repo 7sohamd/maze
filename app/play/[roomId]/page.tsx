@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
+import { usePetraWallet } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -49,9 +50,7 @@ export default function GamePage() {
   const [playerHit, setPlayerHit] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  const [lastMovement, setLastMovement] = useState<{x: number, y: number} | null>(null)
-  const movementQueueRef = useRef<Array<{x: number, y: number}>>([])
-  const isProcessingMovementRef = useRef(false)
+  const playerWallet = usePetraWallet()
 
   // Initialize game
   useEffect(() => {
@@ -66,6 +65,8 @@ export default function GamePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ difficulty }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerWallet: playerWallet.address }),
         })
         console.log("Start response status:", response.status)
         console.log("Start response headers:", Object.fromEntries(response.headers.entries()))
@@ -95,7 +96,7 @@ export default function GamePage() {
     }
 
     initGame()
-  }, [roomId, router])
+  }, [roomId, router, playerWallet.address])
 
   // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
@@ -978,27 +979,8 @@ export default function GamePage() {
       onFocus={() => console.log("Game focused - ready for input!")}
       style={{ outline: "none" }}
     >
-      {/* Animated background dots - only render on client to prevent hydration mismatch */}
-      {isClient && (
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(20)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute w-2 h-2 bg-yellow-400 rounded-full animate-pulse"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 2}s`,
-                animationDuration: `${2 + Math.random() * 2}s`
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="relative z-10 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 bg-black/20 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
           <Button
             onClick={() => router.push("/")}
             variant="outline"

@@ -11,8 +11,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     console.log("Game start request for room:", roomId)
     
-    const body = await request.json()
-    const difficulty = body.difficulty || 'medium'
+    // Accept playerWallet and difficulty from request body
+    const body = await request.json();
+    const playerWallet = body.playerWallet || null;
+    const difficulty = body.difficulty || 'medium';
     
     // Difficulty settings
     const difficultySettings = {
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         speed: 1.0,
         score: 0,
       },
-      enemies: mapData.enemies.map(enemy => ({
+      enemies: mapData.enemies.map((enemy: any) => ({
         id: enemy.id,
         x: Number(enemy.x),
         y: Number(enemy.y)
@@ -90,9 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       gameStatus: "playing" as const,
       viewers: existingViewers, // Preserve existing viewer count
       lastUpdate: Date.now(),
-      timeLeft: settings.timeLimit,
-      difficulty: difficulty,
-      difficultySettings: settings,
+      timeLeft: 120,
     }
     
     console.log("Game state created, updating room:", roomId)
@@ -116,10 +116,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       gameStatus: gameState.gameStatus,
       viewers: gameState.viewers,
       lastUpdate: gameState.lastUpdate,
-      timeLeft: gameState.timeLeft,
-      difficulty: gameState.difficulty,
-      difficultySettings: gameState.difficultySettings,
-      createdAt: new Date()
+      timeLeft: gameState.timeLeft
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))
