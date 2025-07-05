@@ -28,9 +28,9 @@ function findShortestPath(maze, obstacles, sx, sy, gx, gy) {
   return null;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { roomId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   try {
-    const roomId = params.roomId;
+    const { roomId } = await params;
     const { action } = await request.json()
     const roomRef = doc(db, "rooms", roomId)
     const roomSnap = await getDoc(roomRef)

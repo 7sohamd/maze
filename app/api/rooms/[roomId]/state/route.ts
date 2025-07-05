@@ -2,13 +2,19 @@ import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
 
-export async function GET(request: NextRequest, { params }: { params: { roomId: string } }) {
-  const roomId = params.roomId;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
+  const { roomId } = await params;
   try {
     const roomRef = doc(db, "rooms", roomId)
     const roomSnap = await getDoc(roomRef)
     if (!roomSnap.exists()) {
-      return NextResponse.json({ error: "Room not found" }, { status: 404 })
+      // Return a waiting state instead of 404
+      return NextResponse.json({ 
+        gameStatus: "waiting",
+        message: "Room not initialized yet",
+        viewers: 0,
+        timeLeft: 0
+      })
     }
     const gameState = roomSnap.data()
 
@@ -42,8 +48,20 @@ export async function GET(request: NextRequest, { params }: { params: { roomId: 
     }
 
     return NextResponse.json(gameState)
-  } catch (error) {
+  } catch (error: any) {
     console.error("State fetch error:", error)
+    
+    // Handle Firebase quota exceeded error
+    if (error.code === 'resource-exhausted') {
+      console.warn('Firebase quota exceeded, returning waiting state')
+      return NextResponse.json({ 
+        gameStatus: "waiting",
+        message: "Service temporarily unavailable",
+        viewers: 0,
+        timeLeft: 0
+      })
+    }
+    
     return NextResponse.json({ error: "Failed to fetch state" }, { status: 500 })
   }
 }
