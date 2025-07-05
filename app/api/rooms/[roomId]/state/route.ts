@@ -74,7 +74,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
-    return NextResponse.json(gameState)
+    return NextResponse.json({
+      ...gameState,
+      playerWallet: gameState.playerWallet || null // Ensure playerWallet is always present
+    })
   } catch (error: any) {
     console.error("State fetch error:", error)
     
