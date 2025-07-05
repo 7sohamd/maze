@@ -80,7 +80,7 @@ export default function LandingPage() {
     <>
       {/* Full-page background GIF */}
       <div
-        className="fixed inset-0 -z-20"
+        className="fixed inset-0 -z-10"
         style={{
           backgroundImage: "url('/background.gif')",
           backgroundSize: "cover",
@@ -90,7 +90,7 @@ export default function LandingPage() {
         aria-hidden="true"
       />
       {/* Black fade overlay */}
-      <div className="fixed inset-0 bg-black/70 -z-10 pointer-events-none" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/70 -z-5 pointer-events-none" aria-hidden="true" />
       {/* Centered logo, but higher and with a pulsating animation */}
       <img
         src="/logo.png"
@@ -102,7 +102,16 @@ export default function LandingPage() {
         className="fixed bottom-0 left-0 m-8 z-10 flex flex-col items-start p-10 bg-black/0 rounded-2xl shadow-2xl text-left"
         style={{ minWidth: 340 }}
       >
-        <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => router.push("/play/solo")}>Start Game</Button>
+        <Button
+          variant="ghost"
+          className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold"
+          onClick={() => {
+            const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            router.push(`/play/${newRoomId}`);
+          }}
+        >
+          Start Game
+        </Button>
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => router.push("/watch")}>Multiplayer</Button>
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => setShowOptions(true)}>Options</Button>
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => setShowCredits(true)}>Credits</Button>

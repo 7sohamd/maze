@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export function isValidAptosAddress(addr: string) {
   return /^0x[a-fA-F0-9]{64}$/.test(addr);
@@ -9,92 +9,72 @@ export function usePetraWallet() {
   const [address, setAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isClient, setIsClient] = useState(false);
 
-  const isPetraAvailable = isClient && typeof window !== 'undefined' && window.petra;
-
-  const connect = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Attempting to connect wallet...');
-      
-      if (!isPetraAvailable) {
-        throw new Error('Petra wallet extension not found. Please install it from https://petra.app/');
-      }
-
-      // Connect using direct Petra API
-      const result = await window.petra!.connect();
-      console.log('Petra connect result:', result);
-      
-      if (result.address) {
-        setAddress(result.address);
-        setIsConnected(true);
-        console.log('Wallet connected successfully:', result.address);
+  // Check for Petra on mount (client-side only)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (!(window as any).aptos) {
+        setError('Petra wallet not found. Make sure the extension is installed, enabled, and this page is not in incognito mode.');
       } else {
-        throw new Error('Failed to get wallet address');
+        setError(null);
       }
-    } catch (err) {
-      console.error('Failed to connect wallet:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-      throw err;
-    } finally {
+    }
+  }, []);
+
+  // Always disconnect before connecting to force the popup
+  const connect = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (typeof window === 'undefined' || !(window as any).aptos) {
+        setError('Petra wallet not found. Make sure the extension is installed, enabled, and this page is not in incognito mode.');
+        setLoading(false);
+        return;
+      }
+      // Force disconnect first
+      await (window as any).aptos.disconnect();
+      // Now connect (will always prompt)
+      const result = await (window as any).aptos.connect();
+      setIsConnected(true);
+      setAddress(result.address);
+      setLoading(false);
+    } catch (err: any) {
+      setError(err.message || 'Failed to connect to Petra');
       setLoading(false);
     }
-  };
+  }, []);
 
-  const disconnect = async () => {
+  // Disconnect
+  const disconnect = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      if (isPetraAvailable) {
-        await window.petra!.disconnect();
+      if (typeof window !== 'undefined' && (window as any).aptos) {
+        await (window as any).aptos.disconnect();
       }
-      setIsConnected(false);
-      setAddress(null);
-      setError(null);
-    } catch (err) {
-      console.error('Failed to disconnect wallet:', err);
-    }
-  };
+    } catch {}
+    setIsConnected(false);
+    setAddress(null);
+    setLoading(false);
+  }, []);
 
-  const signAndSubmitTransaction = async (transaction: any) => {
-    if (!isPetraAvailable || !isConnected) {
-      throw new Error('Wallet not connected');
-    }
-    
-    try {
-      const result = await window.petra!.signAndSubmitTransaction(transaction);
-      return result;
-    } catch (err) {
-      console.error('Failed to sign and submit transaction:', err);
-      throw err;
-    }
-  };
+  // Expose signAndSubmitTransaction
+  const signAndSubmitTransaction = useCallback(async (payload: any) => {
+    if (typeof window === 'undefined' || !(window as any).aptos) throw new Error('Petra wallet not found');
+    return (window as any).aptos.signAndSubmitTransaction({ payload });
+  }, []);
 
-  // Set client flag and check connection status on mount
-  useEffect(() => {
-    setIsClient(true);
-    
-    if (isPetraAvailable) {
-      window.petra!.isConnected().then((connected: boolean) => {
-        if (connected) {
-          window.petra!.account().then((account: any) => {
-            setAddress(account.address);
-            setIsConnected(true);
-          }).catch(console.error);
-        }
-      }).catch(console.error);
-    }
-  }, [isPetraAvailable]);
+  // Check if Petra is available
+  const isPetraAvailable = typeof window !== 'undefined' && !!(window as any).aptos;
 
   return {
     isConnected,
     address,
+    loading,
+    error,
     connect,
     disconnect,
     signAndSubmitTransaction,
-    loading,
-    error,
     isPetraAvailable,
   };
 } 
