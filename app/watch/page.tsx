@@ -72,10 +72,10 @@ export default function WatchPage() {
             Back to Home
           </Button>
           
-          <div className="text-white text-4xl font-bold mb-4 drop-shadow-2xl">
+          <div className="text-white text-4xl font-bold mb-4 drop-shadow-2xl press-start-bold">
             👻 Viewer Mode
           </div>
-          <div className="text-white/80 text-lg drop-shadow">
+          <div className="text-white/80 text-lg drop-shadow press-start-bold">
             Join a game room to watch and sabotage players!
           </div>
         </div>
@@ -83,14 +83,14 @@ export default function WatchPage() {
         {/* Room Join Card */}
         <Card className="bg-black/60 border-white/20 shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-white text-2xl font-bold flex items-center gap-2 drop-shadow-lg">
+            <CardTitle className="text-white text-2xl font-bold flex items-center gap-2 drop-shadow-lg press-start-bold">
               <Eye className="h-6 w-6 text-pink-400" />
               Join Game Room
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
-              <label className="block text-white text-sm font-semibold mb-2 drop-shadow">
+              <label className="block text-white text-sm font-semibold mb-2 drop-shadow press-start-bold">
                 Room ID (6 characters)
               </label>
               <Input
@@ -115,7 +115,7 @@ export default function WatchPage() {
             <Button
               onClick={handleJoinRoom}
               disabled={!roomId.trim()}
-              className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none press-start-bold"
             >
               <Eye className="h-5 w-5 mr-2" />
               Join Room
@@ -126,7 +126,7 @@ export default function WatchPage() {
         {/* Features Card */}
         <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-white text-xl font-bold drop-shadow-lg">
+            <CardTitle className="text-white text-xl font-bold drop-shadow-lg press-start-bold">
               🎮 Viewer Features
             </CardTitle>
           </CardHeader>
@@ -136,7 +136,7 @@ export default function WatchPage() {
                 <Users className="h-4 w-4 text-pink-400" />
               </div>
               <div>
-                <div className="font-semibold">Watch Live Games</div>
+                <div className="font-semibold press-start-bold">Watch Live Games</div>
                 <div className="text-sm text-white/70">See players navigate through mazes in real-time</div>
               </div>
             </div>
@@ -146,7 +146,7 @@ export default function WatchPage() {
                 <Gamepad2 className="h-4 w-4 text-red-400" />
               </div>
               <div>
-                <div className="font-semibold">Sabotage Players</div>
+                <div className="font-semibold press-start-bold">Sabotage Players</div>
                 <div className="text-sm text-white/70">Use tokens to make the game more challenging</div>
               </div>
             </div>
@@ -156,7 +156,7 @@ export default function WatchPage() {
                 <Eye className="h-4 w-4 text-yellow-400" />
               </div>
               <div>
-                <div className="font-semibold">Voice Commands</div>
+                <div className="font-semibold press-start-bold">Voice Commands</div>
                 <div className="text-sm text-white/70">Use AI-powered voice sabotage (Chrome/Edge)</div>
               </div>
             </div>

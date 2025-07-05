@@ -176,17 +176,31 @@ export default function HomePage() {
       )}
 
       <div className="relative z-10 container mx-auto px-4 py-16">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <h1 className="text-6xl font-black text-white mb-6 drop-shadow-2xl flex items-center justify-center gap-4">
-            <Ghost className="h-16 w-16 text-yellow-400" />
-            PACMAN MAZE
-            <Ghost className="h-16 w-16 text-yellow-400" />
-          </h1>
-          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto drop-shadow-lg">
-            Navigate the maze, collect dots, avoid ghosts, and reach the goal! 
-            Challenge your friends with real-time sabotage actions.
-          </p>
+        {/* Hero Section with background.gif */}
+        <div
+          className="relative rounded-3xl overflow-hidden mb-16"
+          style={{
+            backgroundImage: "url('/background.gif')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            minHeight: '340px',
+            boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)'
+          }}
+        >
+          {/* Optional overlay for readability */}
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative z-10 text-center py-16 px-4">
+            <h1 className="text-6xl font-black text-white mb-6 drop-shadow-2xl flex items-center justify-center gap-4 press-start-bold">
+              <Ghost className="h-16 w-16 text-yellow-400" />
+              PACMAN MAZE
+              <Ghost className="h-16 w-16 text-yellow-400" />
+            </h1>
+            <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto drop-shadow-lg ">
+              Navigate the maze, collect dots, avoid ghosts, and reach the goal! 
+              Challenge your friends with real-time sabotage actions.
+            </p>
+          </div>
         </div>
 
         {/* Main Actions */}
@@ -194,7 +208,7 @@ export default function HomePage() {
           <Button
             onClick={handleCreateGame}
             size="lg"
-            className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-black font-bold text-xl px-8 py-6 rounded-2xl shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300"
+            className="bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 text-black font-bold text-xl px-8 py-6 rounded-2xl shadow-2xl hover:shadow-3xl transform hover:-translate-y-1 transition-all duration-300 press-start-bold"
           >
             <Gamepad2 className="h-6 w-6 mr-3" />
             Create New Game
@@ -204,7 +218,7 @@ export default function HomePage() {
             onClick={() => router.push("/watch")}
             variant="outline"
             size="lg"
-            className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm font-bold text-xl px-8 py-6 rounded-2xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+            className="bg-white/10 border-white/30 text-white hover:bg-white/20 backdrop-blur-sm font-bold text-xl px-8 py-6 rounded-2xl shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 press-start-bold"
           >
             <Eye className="h-6 w-6 mr-3" />
             Watch Game
@@ -215,7 +229,7 @@ export default function HomePage() {
         <div className="grid md:grid-cols-3 gap-8 mb-16">
           <Card className="bg-white/10 backdrop-blur-sm border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
             <CardHeader>
-              <CardTitle className="text-white text-xl font-bold flex items-center gap-2">
+              <CardTitle className="text-white text-xl font-bold flex items-center gap-2 press-start-bold">
                 <Zap className="h-6 w-6 text-yellow-400" />
                 Real-time Multiplayer
               </CardTitle>
@@ -227,7 +241,7 @@ export default function HomePage() {
 
           <Card className="bg-white/10 backdrop-blur-sm border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
             <CardHeader>
-              <CardTitle className="text-white text-xl font-bold flex items-center gap-2">
+              <CardTitle className="text-white text-xl font-bold flex items-center gap-2 press-start-bold">
                 <Users className="h-6 w-6 text-blue-400" />
                 Viewer Sabotage
               </CardTitle>
@@ -239,7 +253,7 @@ export default function HomePage() {
 
           <Card className="bg-white/10 backdrop-blur-sm border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">
             <CardHeader>
-              <CardTitle className="text-white text-xl font-bold flex items-center gap-2">
+              <CardTitle className="text-white text-xl font-bold flex items-center gap-2 press-start-bold">
                 <Trophy className="h-6 w-6 text-yellow-400" />
                 Multiple Difficulties
               </CardTitle>
@@ -252,19 +266,19 @@ export default function HomePage() {
 
         {/* Difficulty Modes Preview */}
         <div className="text-center">
-          <h2 className="text-4xl font-black text-white mb-8 drop-shadow-2xl flex items-center justify-center gap-3">
+          <h2 className="text-4xl font-black text-white mb-8 drop-shadow-2xl flex items-center justify-center gap-3 press-start-bold">
             <Shield className="h-10 w-10" />
             Difficulty Modes
             <Sword className="h-10 w-10" />
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {difficultyModes.map((mode) => (
-              <div key={mode.id} className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 text-center transform hover:scale-105 transition-all duration-300 hover:shadow-xl border-0">
+              <div key={mode.id} className="bg-white/90 backdrop-blur-sm rounded-2xl p-6 text-center transform hover:scale-105 transition-all duration-300 hover:shadow-xl border-0 press-start-bold">
                 <div className="text-4xl mb-3">{mode.icon}</div>
-                <div className={`bg-gradient-to-r ${mode.color} text-white font-bold py-2 px-4 rounded-full text-sm mb-3`}>
+                <div className={`bg-gradient-to-r ${mode.color} text-white font-bold py-2 px-4 rounded-full text-sm mb-3 press-start-bold`}>
                   {mode.name}
                 </div>
-                <div className="text-gray-800 font-semibold text-lg mb-2">{mode.description}</div>
+                <div className="text-gray-800 font-semibold text-lg mb-2 press-start-bold">{mode.description}</div>
                 <div className="text-gray-600 text-sm space-y-1">
                   {mode.features.map((feature, i) => (
                     <div key={i} className="flex items-center justify-center gap-2">
@@ -280,7 +294,7 @@ export default function HomePage() {
 
         {/* Footer */}
         <div className="text-center mt-16">
-          <div className="flex items-center justify-center gap-4 text-white/80 text-lg">
+          <div className="flex items-center justify-center gap-4 text-white/80 text-lg press-start-bold">
             <Star className="h-6 w-6" />
             <span>Collect dots, avoid ghosts, reach the goal!</span>
             <Star className="h-6 w-6" />
@@ -293,7 +307,7 @@ export default function HomePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-white/20">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-3xl font-black text-white">Choose Difficulty</h2>
+              <h2 className="text-3xl font-black text-white press-start-bold">Choose Difficulty</h2>
               <Button
                 onClick={() => setShowDifficultyModal(false)}
                 variant="ghost"
@@ -311,25 +325,25 @@ export default function HomePage() {
                   onClick={() => handleDifficultySelect(mode)}
                   className={`cursor-pointer rounded-2xl p-6 transition-all duration-300 transform hover:scale-105 ${
                     selectedDifficulty?.id === mode.id
-                      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-black shadow-2xl'
-                      : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20'
+                      ? 'bg-gradient-to-br from-yellow-400 to-orange-500 text-black shadow-2xl press-start-bold'
+                      : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20 press-start-bold'
                   }`}
                 >
                   <div className="text-6xl mb-4 text-center">{mode.icon}</div>
                   <h3 className={`text-2xl font-bold mb-3 text-center ${
-                    selectedDifficulty?.id === mode.id ? 'text-black' : 'text-white'
+                    selectedDifficulty?.id === mode.id ? 'text-black press-start-bold' : 'text-white press-start-bold'
                   }`}>
                     {mode.name}
                   </h3>
                   <p className={`text-sm mb-4 ${
-                    selectedDifficulty?.id === mode.id ? 'text-black/80' : 'text-white/80'
+                    selectedDifficulty?.id === mode.id ? 'text-black/80 press-start-bold' : 'text-white/80 press-start-bold'
                   }`}>
                     {mode.description}
                   </p>
                   <div className="space-y-2">
                     {mode.features.map((feature, i) => (
                       <div key={i} className={`flex items-center gap-2 text-sm ${
-                        selectedDifficulty?.id === mode.id ? 'text-black/90' : 'text-white/90'
+                        selectedDifficulty?.id === mode.id ? 'text-black/90 press-start-bold' : 'text-white/90 press-start-bold'
                       }`}>
                         <div className={`w-2 h-2 rounded-full ${
                           selectedDifficulty?.id === mode.id ? 'bg-black' : 'bg-green-400'
@@ -349,8 +363,8 @@ export default function HomePage() {
                 size="lg"
                 className={`font-bold text-xl px-8 py-4 rounded-xl shadow-xl transform hover:-translate-y-1 transition-all duration-300 ${
                   selectedDifficulty
-                    ? 'bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white'
-                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white press-start-bold'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed press-start-bold'
                 }`}
               >
                 {selectedDifficulty ? `Start ${selectedDifficulty.name}` : 'Select Difficulty'}

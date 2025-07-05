@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
-import { usePetraWallet } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -50,7 +49,7 @@ export default function GamePage() {
   const [playerHit, setPlayerHit] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  const playerWallet = usePetraWallet()
+  const [attachStatus, setAttachStatus] = useState<string | null>(null)
 
   // Initialize game
   useEffect(() => {
@@ -65,8 +64,6 @@ export default function GamePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ difficulty }),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playerWallet: playerWallet.address }),
         })
         console.log("Start response status:", response.status)
         console.log("Start response headers:", Object.fromEntries(response.headers.entries()))
@@ -96,7 +93,7 @@ export default function GamePage() {
     }
 
     initGame()
-  }, [roomId, router, playerWallet.address])
+  }, [roomId, router])
 
   // Handle keyboard input - SIMPLIFIED VERSION
   useEffect(() => {
@@ -486,11 +483,11 @@ export default function GamePage() {
     // Calculate optimal cell size based on maze dimensions and screen size
     const maxWidth = Math.min(window.innerWidth - 100, 1000) // Leave space for UI
     const maxHeight = Math.min(window.innerHeight - 200, 800) // Leave space for UI
-    const cellSize = Math.min(
+    const cellSize = Math.max(8, Math.min(
       maxWidth / maze[0].length,
       maxHeight / maze.length,
       30 // Maximum cell size
-    )
+    ))
     
     canvas.width = maze[0].length * cellSize
     canvas.height = maze.length * cellSize
@@ -617,7 +614,7 @@ export default function GamePage() {
     gameState.enemies.forEach((enemy) => {
       const xPos = enemy.x * cellSize + cellSize / 2
       const yPos = enemy.y * cellSize + cellSize / 2
-      const radius = cellSize / 2 - 2
+      const radius = Math.max(2, cellSize / 2 - 2)
       
       // Enemy glow
       ctx.shadowColor = "#EF4444"

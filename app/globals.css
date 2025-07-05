@@ -1,9 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
+body, html {
+  font-family: 'Poppins', Arial, Helvetica, sans-serif;
 }
 
 @layer utilities {
@@ -91,4 +94,9 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.press-start-bold, h1, h2, h3, h4, h5, h6 {
+  font-family: 'Press Start 2P', monospace !important;
+  font-weight: 400 !important;
 }
