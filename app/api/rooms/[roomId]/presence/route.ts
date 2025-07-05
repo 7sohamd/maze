@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         fallbackViewerCounts.set(roomId, newCount)
         console.log(`[Presence POST] Fallback mode - Incrementing viewers from ${currentViewers} to ${newCount}`)
       } else {
-        console.log(`[Presence POST] Fallback mode - Not a new viewer, skipping increment`)
+        console.log(`[Presence POST] Fallback mode - Heartbeat received, no count change`)
       }
       
       return NextResponse.json({ success: true, fallback: true })
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           createdAt: new Date(),
           gameStatus: "waiting"
         })
+        console.log(`[Presence POST] Successfully created room with 1 viewer`)
       } catch (error: any) {
         if (error.code === 'resource-exhausted') {
           firebaseQuotaExceeded = true
@@ -56,26 +57,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Only increment viewer count if this is a new viewer joining
       const currentData = roomSnap.data()
       const currentViewers = currentData?.viewers || 0
-      console.log(`[Presence POST] Incrementing viewers from ${currentViewers} to ${currentViewers + 1}`)
+      const newViewerCount = currentViewers + 1
+      
+      console.log(`[Presence POST] Incrementing viewers from ${currentViewers} to ${newViewerCount}`)
       
       try {
+        // Use setDoc instead of increment for better control
         await updateDoc(roomRef, {
-          viewers: increment(1)
+          viewers: newViewerCount
         })
+        console.log(`[Presence POST] Successfully incremented viewers for room: ${roomId}`)
       } catch (error: any) {
         if (error.code === 'resource-exhausted') {
           firebaseQuotaExceeded = true
-          const newCount = currentViewers + 1
-          fallbackViewerCounts.set(roomId, newCount)
+          fallbackViewerCounts.set(roomId, newViewerCount)
           console.log(`[Presence POST] Firebase quota exceeded, switching to fallback mode`)
           return NextResponse.json({ success: true, fallback: true })
         }
         throw error
       }
     } else {
-      console.log(`[Presence POST] Not a new viewer, skipping increment`)
+      // This is just a heartbeat, don't change the viewer count
+      console.log(`[Presence POST] Heartbeat received for room: ${roomId}, no count change`)
     }
-    // If not a new viewer, just return success without updating count
     
     return NextResponse.json({ success: true })
   } catch (error: any) {
@@ -94,6 +98,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const newCount = currentViewers + 1
         fallbackViewerCounts.set(roomId, newCount)
         console.log(`[Presence POST] Fallback mode - Incrementing viewers from ${currentViewers} to ${newCount}`)
+      } else {
+        console.log(`[Presence POST] Fallback mode - Heartbeat received, no count change`)
       }
       
       return NextResponse.json({ success: true, fallback: true })
@@ -113,7 +119,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       const currentViewers = fallbackViewerCounts.get(roomId) || 0
       
       if (currentViewers > 0) {
-        const newCount = currentViewers - 1
+        const newCount = Math.max(0, currentViewers - 1) // Ensure we don't go below 0
         fallbackViewerCounts.set(roomId, newCount)
         console.log(`[Presence DELETE] Fallback mode - Decrementing viewers from ${currentViewers} to ${newCount}`)
       } else {
@@ -134,18 +140,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       
       console.log(`[Presence DELETE] Current viewers: ${currentViewers}`)
       
-      // Only decrement if there are viewers to decrement
+      // Only decrement if there are viewers to decrement and we won't go below 0
       if (currentViewers > 0) {
-        console.log(`[Presence DELETE] Decrementing viewers from ${currentViewers} to ${currentViewers - 1}`)
+        const newViewerCount = Math.max(0, currentViewers - 1)
+        console.log(`[Presence DELETE] Decrementing viewers from ${currentViewers} to ${newViewerCount}`)
+        
         try {
+          // Use setDoc instead of increment to ensure we don't go below 0
           await updateDoc(roomRef, {
-            viewers: increment(-1)
+            viewers: newViewerCount
           })
+          console.log(`[Presence DELETE] Successfully decremented viewers for room: ${roomId}`)
         } catch (error: any) {
           if (error.code === 'resource-exhausted') {
             firebaseQuotaExceeded = true
-            const newCount = currentViewers - 1
-            fallbackViewerCounts.set(roomId, newCount)
+            fallbackViewerCounts.set(roomId, newViewerCount)
             console.log(`[Presence DELETE] Firebase quota exceeded, switching to fallback mode`)
             return NextResponse.json({ success: true, fallback: true })
           }
@@ -171,7 +180,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       const currentViewers = fallbackViewerCounts.get(roomId) || 0
       
       if (currentViewers > 0) {
-        const newCount = currentViewers - 1
+        const newCount = Math.max(0, currentViewers - 1)
         fallbackViewerCounts.set(roomId, newCount)
         console.log(`[Presence DELETE] Fallback mode - Decrementing viewers from ${currentViewers} to ${newCount}`)
       }

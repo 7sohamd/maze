@@ -51,6 +51,9 @@ export default function GamePage() {
   const [isMoving, setIsMoving] = useState(false)
   const [isClient, setIsClient] = useState(false)
   const playerWallet = usePetraWallet()
+  const [lastMovement, setLastMovement] = useState<{x: number, y: number} | null>(null)
+  const movementQueueRef = useRef<Array<{x: number, y: number}>>([])
+  const isProcessingMovementRef = useRef(false)
 
   // Initialize game
   useEffect(() => {
@@ -64,9 +67,10 @@ export default function GamePage() {
         const response = await fetch(`/api/rooms/${roomId}/start`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ difficulty }),
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ playerWallet: playerWallet.address }),
+          body: JSON.stringify({ 
+            difficulty,
+            playerWallet: playerWallet.address 
+          }),
         })
         console.log("Start response status:", response.status)
         console.log("Start response headers:", Object.fromEntries(response.headers.entries()))
@@ -314,13 +318,22 @@ export default function GamePage() {
           const newState = await response.json()
           if (newState && !newState.error) {
             // Check if player got hit (health decreased)
-            if (gameState && newState.player.health < gameState.player.health) {
+            if (gameState && newState.player && newState.player.health < gameState.player.health) {
               setPlayerHit(true)
               // Reset hit effect after 1 second
               setTimeout(() => setPlayerHit(false), 1000)
             }
-            setGameState(newState)
+            
+            // Update game state, preserving viewer count if it exists
+            setGameState(prevState => ({
+              ...newState,
+              viewers: newState.viewers !== undefined ? newState.viewers : (prevState?.viewers || 0)
+            }))
+            
+            console.log(`[Game] State updated - viewers: ${newState.viewers}, health: ${newState.player?.health}`)
           }
+        } else {
+          console.log(`[Game] State poll failed with status: ${response.status}`)
         }
       } catch (error) {
         console.log("State poll error:", error)
@@ -724,17 +737,14 @@ export default function GamePage() {
     
     const register = async () => {
       try { 
-        await fetch(`/api/rooms/${roomId}/presence`, { method: "POST" }) 
+        const response = await fetch(`/api/rooms/${roomId}/presence`, { method: "POST" })
+        if (response.ok) {
+          console.log(`[Game] Presence registered for room: ${roomId}`)
+        } else {
+          console.log(`[Game] Presence registration failed with status: ${response.status}`)
+        }
       } catch (error) {
         console.log("Presence registration failed:", error)
-      }
-    }
-    
-    const unregister = async () => {
-      try { 
-        await fetch(`/api/rooms/${roomId}/presence`, { method: "DELETE" }) 
-      } catch (error) {
-        console.log("Presence unregistration failed:", error)
       }
     }
     
@@ -744,12 +754,11 @@ export default function GamePage() {
       heartbeat = setInterval(register, 15000)
     }
     
-    window.addEventListener("beforeunload", unregister)
     return () => {
       isActive = false
       if (heartbeat) clearInterval(heartbeat)
-      unregister()
-      window.removeEventListener("beforeunload", unregister)
+      // Note: We don't unregister presence for the game player
+      // The game player should not affect viewer count
     }
   }, [roomId, gameState, loading])
 
@@ -1026,7 +1035,9 @@ export default function GamePage() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
               <Users className="h-4 w-4" />
-              <span className="font-semibold">{gameState.viewers} viewers</span>
+              <span className="font-semibold">
+                {gameState.viewers !== undefined ? gameState.viewers : 0} viewers
+              </span>
             </div>
             <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
               ⏰ {minutes}:{seconds.toString().padStart(2, "0")}

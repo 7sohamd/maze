@@ -92,13 +92,27 @@ export default function WatchPage() {
     // Check if voice input is supported
     setVoiceSupported('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
     
+    // Generate a unique session ID for this viewer that persists across re-renders
+    let sessionId = sessionStorage.getItem(`viewer_session_id_${roomId}`)
+    if (!sessionId) {
+      sessionId = Math.random().toString(36).substring(2, 15)
+      sessionStorage.setItem(`viewer_session_id_${roomId}`, sessionId)
+      console.log(`[Watch] Created new session ID: ${sessionId} for room: ${roomId}`)
+    } else {
+      console.log(`[Watch] Using existing session ID: ${sessionId} for room: ${roomId}`)
+    }
+    const sessionKey = `viewer_session_${roomId}_${sessionId}`
+    
+    console.log(`[Watch] Initializing viewer session: ${sessionId} for room: ${roomId}`)
+    console.log(`[Watch] Session key: ${sessionKey}`)
+    console.log(`[Watch] Already registered: ${sessionStorage.getItem(sessionKey) ? 'YES' : 'NO'}`)
+    
     const pollGameState = async () => {
       try {
         const response = await fetch(`/api/rooms/${roomId}/state`)
         if (response.ok) {
           const state = await response.json()
-          console.log("Game state received:", state)
-          console.log(`[Watch] Received viewer count: ${state.viewers}`)
+          console.log(`[Watch] Game state received - viewers: ${state.viewers}, session: ${sessionId}`)
           
           // Handle waiting state - show waiting message but don't set gameState to null
           if (state.gameStatus === "waiting") {
@@ -134,16 +148,15 @@ export default function WatchPage() {
       try {
         const headers: HeadersInit = {};
         
-        // Check if this viewer has already registered for this room using localStorage
-        const registrationKey = `viewer_registered_${roomId}`;
-        const hasRegistered = localStorage.getItem(registrationKey);
+        // Check if this viewer has already registered for this room using session storage
+        const hasRegistered = sessionStorage.getItem(sessionKey);
         
         if (!hasRegistered) {
           headers["x-new-viewer"] = "true";
-          localStorage.setItem(registrationKey, "true");
-          console.log(`[Watch] Registering as new viewer for room: ${roomId}`)
+          sessionStorage.setItem(sessionKey, "true");
+          console.log(`[Watch] Registering as new viewer for room: ${roomId} (session: ${sessionId})`)
         } else {
-          console.log(`[Watch] Re-registering presence for room: ${roomId}`)
+          console.log(`[Watch] Sending heartbeat for room: ${roomId} (session: ${sessionId}) - already registered`)
         }
         
         const response = await fetch(`/api/rooms/${roomId}/presence`, { 
@@ -151,7 +164,10 @@ export default function WatchPage() {
           headers
         })
         if (response.ok) {
-          console.log("Presence registered successfully for room:", roomId)
+          const responseData = await response.json()
+          console.log(`[Watch] Presence ${!hasRegistered ? 'registered' : 'heartbeat sent'} successfully for room: ${roomId} (fallback: ${responseData.fallback || false})`)
+        } else {
+          console.log(`[Watch] Presence request failed with status: ${response.status}`)
         }
       } catch (error) {
         console.error("Failed to register presence:", error)
@@ -161,18 +177,72 @@ export default function WatchPage() {
     pollGameState()
     registerPresence()
     const interval = setInterval(pollGameState, 100) // Ultra-fast polling for real-time viewing
-    const presenceInterval = setInterval(registerPresence, 30000) // Register presence every 30s (reduced from 15s)
+    const presenceInterval = setInterval(registerPresence, 30000) // Register presence every 30s
 
     return () => {
+      console.log(`[Watch] Cleaning up intervals for session: ${sessionId}`)
       clearInterval(interval)
       clearInterval(presenceInterval)
-      // Unregister presence when leaving
-      fetch(`/api/rooms/${roomId}/presence`, { method: "DELETE" }).catch(console.error)
-      // Clean up localStorage registration
-      const registrationKey = `viewer_registered_${roomId}`;
-      localStorage.removeItem(registrationKey);
+      // Note: We don't unregister presence here to prevent premature decrements
+      // Presence will be unregistered only when the user actually leaves the page
     }
   }, [roomId, router])
+
+  // Separate effect for handling page unload - only unregister when user actually leaves
+  useEffect(() => {
+    // Get the existing session ID
+    const sessionId = sessionStorage.getItem(`viewer_session_id_${roomId}`)
+    if (!sessionId) {
+      console.log(`[Watch] No session ID found for room: ${roomId}, skipping unload handler`)
+      return
+    }
+    
+    const sessionKey = `viewer_session_${roomId}_${sessionId}`
+    
+    const handleBeforeUnload = () => {
+      console.log(`[Watch] User leaving page, unregistering presence for room: ${roomId} (session: ${sessionId})`)
+      
+      // Only unregister if this session was actually registered
+      if (sessionStorage.getItem(sessionKey)) {
+        // Use sendBeacon for reliable unregistration on page unload
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(`/api/rooms/${roomId}/presence`, JSON.stringify({ method: 'DELETE' }))
+        } else {
+          // Fallback for browsers that don't support sendBeacon
+          fetch(`/api/rooms/${roomId}/presence`, { 
+            method: "DELETE",
+            keepalive: true 
+          }).catch(console.error)
+        }
+        
+        // Clean up session storage
+        sessionStorage.removeItem(sessionKey);
+        sessionStorage.removeItem(`viewer_session_id_${roomId}`);
+      } else {
+        console.log(`[Watch] Session ${sessionId} was not registered, skipping unregistration`)
+      }
+    }
+
+    // Handle page unload
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    
+    // Handle page visibility change (tab switching)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        console.log(`[Watch] Page hidden, but keeping presence registered for room: ${roomId} (session: ${sessionId})`)
+      } else {
+        console.log(`[Watch] Page visible again for room: ${roomId} (session: ${sessionId})`)
+      }
+    }
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      console.log(`[Watch] Cleaning up unload handlers for session: ${sessionId}`)
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [roomId])
 
   // Update cooldowns
   useEffect(() => {
