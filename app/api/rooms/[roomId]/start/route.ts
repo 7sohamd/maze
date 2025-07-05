@@ -10,6 +10,10 @@ export async function POST(request: NextRequest, { params }: { params: { roomId:
   try {
     console.log("Game start request for room:", roomId)
     
+    // Accept playerWallet from request body
+    const body = await request.json().catch(() => ({}));
+    const playerWallet = body.playerWallet || null;
+    
     const mapResponse = await fetch(`${request.nextUrl.origin}/api/generate-map`)
     if (!mapResponse.ok) {
       console.error("Failed to generate map:", mapResponse.status)
@@ -42,6 +46,7 @@ export async function POST(request: NextRequest, { params }: { params: { roomId:
       viewers: 0,
       lastUpdate: Date.now(),
       timeLeft: 120,
+      playerWallet
     }
     
     console.log("Game state created, updating room:", roomId)
@@ -56,7 +61,8 @@ export async function POST(request: NextRequest, { params }: { params: { roomId:
       gameStatus: gameState.gameStatus,
       viewers: gameState.viewers,
       lastUpdate: gameState.lastUpdate,
-      timeLeft: gameState.timeLeft
+      timeLeft: gameState.timeLeft,
+      playerWallet
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))

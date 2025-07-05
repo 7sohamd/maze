@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
+import { usePetraWallet } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -44,6 +45,7 @@ export default function GamePage() {
   const isKeyDownRef = useRef(false)
   const [cellSize, setCellSize] = useState(20)
   const [copied, setCopied] = useState(false)
+  const playerWallet = usePetraWallet()
 
   // Initialize game
   useEffect(() => {
@@ -64,6 +66,8 @@ export default function GamePage() {
         
         const response = await fetch(`/api/rooms/${roomId}/start`, {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ playerWallet: playerWallet.address }),
         })
         console.log("Start response status:", response.status)
         console.log("Start response headers:", Object.fromEntries(response.headers.entries()))
@@ -93,7 +97,7 @@ export default function GamePage() {
     }
 
     initGame()
-  }, [roomId, router])
+  }, [roomId, router, playerWallet.address])
 
   // Handle keyboard input - IMPROVED VERSION
   useEffect(() => {
@@ -504,6 +508,30 @@ export default function GamePage() {
       style={{ outline: "none" }}
     >
       <div className="max-w-6xl mx-auto">
+        {/* Player Petra Wallet Connect Section */}
+        <div className="mb-6">
+          <div className="bg-gray-800 border border-gray-700 rounded p-4 max-w-md">
+            <div className="font-bold text-white mb-2">Player Petra Wallet</div>
+            {playerWallet.isConnected ? (
+              <>
+                <div className="text-xs text-gray-400 break-all">{playerWallet.address}</div>
+                <div className="text-yellow-400 font-bold">{playerWallet.balance ?? '...'} APT</div>
+                <button onClick={playerWallet.disconnect} className="mt-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Disconnect</button>
+              </>
+            ) : (
+              <button
+                onClick={playerWallet.connect}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+                disabled={playerWallet.loading}
+              >
+                {playerWallet.loading ? "Connecting..." : "Connect Petra Wallet"}
+              </button>
+            )}
+            {playerWallet.error && (
+              <div className="text-red-400 text-xs mt-2">{playerWallet.error}</div>
+            )}
+          </div>
+        </div>
         <div className="flex items-center justify-between mb-6">
           <Button
             onClick={() => router.push("/")}

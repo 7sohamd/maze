@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Eye, Coins, Zap, Mic } from "lucide-react"
+import { useAptosWallet } from "@/hooks/use-aptos-wallet"
+import { usePetraWallet, isValidAptosAddress } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -47,12 +49,20 @@ export default function WatchPage() {
   const [geminiInput, setGeminiInput] = useState("")
   const [geminiLoading, setGeminiLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [playerAddress, setPlayerAddress] = useState("")
+  const [sabotageAmount, setSabotageAmount] = useState(0.1)
+  const [txStatus, setTxStatus] = useState<string | null>(null)
+  const [manualPlayerAddress, setManualPlayerAddress] = useState("")
+
+  // Add wallet hooks for player and watcher
+  const playerWallet = useAptosWallet();
+  const watcherWallet = usePetraWallet();
 
   const sabotageActions: SabotageAction[] = [
     {
       id: "slow",
       name: "Slow Down",
-      cost: 50,
+      cost: 0.05,
       icon: "🐌",
       description: "Reduce player speed by 30%",
       cooldown: 10000,
@@ -60,7 +70,7 @@ export default function WatchPage() {
     {
       id: "block",
       name: "Block Path",
-      cost: 75,
+      cost: 0.08,
       icon: "🧱",
       description: "Place obstacle near player",
       cooldown: 15000,
@@ -68,7 +78,7 @@ export default function WatchPage() {
     {
       id: "damage",
       name: "Damage",
-      cost: 100,
+      cost: 0.1,
       icon: "💔",
       description: "Reduce player health",
       cooldown: 12000,
@@ -76,7 +86,7 @@ export default function WatchPage() {
     {
       id: "enemy",
       name: "Spawn Enemy",
-      cost: 125,
+      cost: 0.1,
       icon: "👹",
       description: "Spawn enemy near player",
       cooldown: 20000,
@@ -189,28 +199,47 @@ export default function WatchPage() {
     ctx.fill()
   }, [gameState])
 
-  const executeSabotage = async (action: SabotageAction) => {
-    if (balance < action.cost || cooldowns[action.id] > 0 || blockedSabotages[action.id]) return
-    try {
-      const response = await fetch(`/api/rooms/${roomId}/sabotage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: action.id }),
-      })
-      if (response.ok) {
-        setBalance((prev) => prev - action.cost)
-        setCooldowns((prev) => ({ ...prev, [action.id]: action.cooldown }))
-        setSabotageMessage(null)
-      } else if (response.status === 400) {
-        const data = await response.json()
-        setSabotageMessage(data.error || "This sabotage is currently blocked.")
-        setBlockedSabotages((prev) => ({ ...prev, [action.id]: true }))
-        setTimeout(() => setBlockedSabotages((prev) => ({ ...prev, [action.id]: false })), 4000)
-      }
-    } catch (error) {
-      setSabotageMessage("Failed to execute sabotage.")
+  // New sabotage logic using watcher wallet
+  const executeSabotageWithWallet = async (action: SabotageAction) => {
+    if (!watcherWallet.isConnected || watcherWallet.loading) {
+      setSabotageMessage("Connect watcher wallet first.");
+      return;
     }
-  }
+    if (!manualPlayerAddress || !isValidAptosAddress(manualPlayerAddress)) {
+      setSabotageMessage("Enter a valid player wallet address (0x...)");
+      return;
+    }
+    try {
+      setSabotageMessage(null);
+      // Send the specified APT amount from watcher to player
+      const payload = {
+        type: "entry_function_payload",
+        function: "0x1::coin::transfer",
+        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+        arguments: [manualPlayerAddress, (action.cost * 1e8).toFixed(0)],
+      };
+      const tx = await watcherWallet.signAndSubmitTransaction(payload);
+      // After payment, trigger sabotage effect in backend (Firestore)
+      try {
+        const sabotageRes = await fetch(`/api/rooms/${roomId}/sabotage`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: action.id }),
+        });
+        if (sabotageRes.ok) {
+          setSabotageMessage(`Sabotage executed! ${action.cost} APT sent to player. Tx Hash: ${tx.hash}`);
+        } else {
+          const data = await sabotageRes.json();
+          setSabotageMessage(`Payment sent, but sabotage failed: ${data.error || "Unknown error"}`);
+        }
+      } catch (apiErr) {
+        setSabotageMessage(`Payment sent, but sabotage API call failed.`);
+      }
+      watcherWallet.fetchBalance(watcherWallet.address!);
+    } catch (err: any) {
+      setSabotageMessage(err.message || "Failed to execute sabotage.");
+    }
+  };
 
   const handleGeminiSabotage = async () => {
     if (!geminiInput.trim()) return
@@ -228,15 +257,13 @@ export default function WatchPage() {
         const action = sabotageActions.find(a => a.id === data.sabotage.id)
         if (!action) {
           setSabotageMessage("Matched sabotage is not available.")
-        } else if (balance < action.cost) {
-          setSabotageMessage("Not enough tokens for this sabotage.")
         } else if (cooldowns[action.id] > 0) {
           setSabotageMessage("This sabotage is on cooldown.")
         } else if (blockedSabotages[action.id]) {
           setSabotageMessage("This sabotage is temporarily blocked.")
         } else {
           // Trigger the sabotage
-          await executeSabotage(action)
+          await executeSabotageWithWallet(action)
           setGeminiInput("")
         }
       } else {
@@ -273,6 +300,66 @@ export default function WatchPage() {
     recognition.start()
   }
 
+  // Sabotage handler
+  const handleSabotage = async () => {
+    setTxStatus(null);
+    if (!watcherWallet.isConnected) {
+      setTxStatus("Connect your Petra wallet first.");
+      return;
+    }
+    if (!isValidAptosAddress(playerAddress)) {
+      setTxStatus("Enter a valid player wallet address (0x...)");
+      return;
+    }
+    if (!sabotageAmount || sabotageAmount <= 0) {
+      setTxStatus("Enter a valid sabotage amount.");
+      return;
+    }
+    // Warn if system clock is off
+    const now = Date.now();
+    const localTime = new Date().getTime();
+    if (Math.abs(now - localTime) > 60000) {
+      setTxStatus("Warning: Your system clock may be incorrect. Please sync your computer's time.");
+      return;
+    }
+    try {
+      setTxStatus("Awaiting wallet approval...");
+      const payload = {
+        type: "entry_function_payload",
+        function: "0x1::coin::transfer",
+        type_arguments: ["0x1::aptos_coin::AptosCoin"],
+        arguments: [playerAddress, (sabotageAmount * 1e8).toFixed(0)],
+      };
+      console.log("Sabotage payload:", payload);
+      const tx = await watcherWallet.signAndSubmitTransaction(payload);
+      setTxStatus("Sabotage successful! Tx Hash: " + tx.hash);
+      watcherWallet.fetchBalance(watcherWallet.address!);
+    } catch (err: any) {
+      if (err && err.message && err.message.includes("TRANSACTION_EXPIRED")) {
+        setTxStatus("Simulation error: TRANSACTION_EXPIRED. Please update Petra, check your system clock, and try again. If the problem persists, try a different browser or wallet.");
+      } else {
+        setTxStatus("Transaction failed: " + (err.message || err));
+      }
+    }
+  };
+
+  useEffect(() => {
+    const fetchPlayerWallet = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${roomId}/state`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.playerWallet) {
+            setManualPlayerAddress(data.playerWallet);
+          }
+        }
+      } catch (err) {
+        // handle error if needed
+      }
+    };
+    fetchPlayerWallet();
+  }, [roomId]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -301,6 +388,31 @@ export default function WatchPage() {
   return (
     <div className="min-h-screen bg-gray-900 p-4">
       <div className="max-w-6xl mx-auto">
+        {/* Watcher Petra Wallet Connect Section */}
+        <div className="mb-6">
+          <div className="bg-gray-800 border border-gray-700 rounded p-4 max-w-md">
+            <div className="font-bold text-white mb-2">Watcher Petra Wallet</div>
+            {watcherWallet.isConnected ? (
+              <>
+                <div className="text-xs text-gray-400 break-all">{watcherWallet.address}</div>
+                <div className="text-yellow-400 font-bold">{watcherWallet.balance ?? 0} APT</div>
+                <button onClick={watcherWallet.disconnect} className="mt-2 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Disconnect</button>
+              </>
+            ) : (
+              <button
+                onClick={watcherWallet.connect}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded"
+                disabled={watcherWallet.loading}
+              >
+                {watcherWallet.loading ? "Connecting..." : "Connect Petra Wallet"}
+              </button>
+            )}
+            {watcherWallet.error && (
+              <div className="text-red-400 text-xs mt-2">{watcherWallet.error}</div>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center justify-between mb-6">
           <Button
             onClick={() => router.push("/")}
@@ -379,6 +491,21 @@ export default function WatchPage() {
 
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
+                <CardTitle className="text-white">Player Wallet Address</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <input
+                  type="text"
+                  className="w-full mb-2 p-2 rounded bg-gray-900 border border-gray-700 text-white"
+                  placeholder="Enter player wallet address (0x...)"
+                  value={manualPlayerAddress}
+                  onChange={e => setManualPlayerAddress(e.target.value)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <Zap className="h-5 w-5 text-yellow-400" />
                   Sabotage Actions
@@ -418,28 +545,20 @@ export default function WatchPage() {
                   </Button>
                 </div>
                 {sabotageActions.map((action) => {
-                  const onCooldown = cooldowns[action.id] > 0
-                  const canAfford = balance >= action.cost
-                  const disabled = onCooldown || !canAfford || gameState.gameStatus !== "playing"
-
+                  const disabled = gameState?.gameStatus !== "playing";
                   return (
                     <Button
                       key={action.id}
-                      onClick={() => executeSabotage(action)}
-                      disabled={disabled || blockedSabotages[action.id]}
-                      className={`w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:text-gray-400 text-left justify-start p-3 h-auto ${blockedSabotages[action.id] ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={() => executeSabotageWithWallet(action)}
+                      disabled={disabled || watcherWallet.loading}
+                      className={`w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:text-gray-400 text-left justify-start p-3 h-auto ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <div className="flex items-center gap-3 w-full">
                         <span className="text-2xl">{action.icon}</span>
                         <div className="flex-1">
                           <div className="font-semibold">{action.name}</div>
                           <div className="text-xs opacity-80">{action.description}</div>
-                          <div className="text-xs text-yellow-300">{action.cost} tokens</div>
-                          {onCooldown && (
-                            <div className="text-xs text-red-300">
-                              Cooldown: {Math.ceil(cooldowns[action.id] / 1000)}s
-                            </div>
-                          )}
+                          <div className="text-xs text-yellow-300">{action.cost} APT</div>
                         </div>
                       </div>
                     </Button>
