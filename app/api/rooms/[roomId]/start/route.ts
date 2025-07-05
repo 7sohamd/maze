@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
-import { doc, setDoc } from "firebase/firestore"
+import { doc, setDoc, getDoc } from "firebase/firestore"
+import { getFallbackViewerCount, isFirebaseQuotaExceeded } from "../presence/route"
 
 // In-memory storage
 // const rooms = new Map<string, any>()
@@ -51,6 +52,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const mapData = await mapResponse.json()
     console.log("Map generated successfully for difficulty:", difficulty)
     
+    // Get existing room data to preserve viewer count
+    let existingViewers = 0
+    
+    // Check if Firebase quota is exceeded
+    if (isFirebaseQuotaExceeded()) {
+      console.log("Firebase quota exceeded, using fallback viewer count")
+      existingViewers = getFallbackViewerCount(roomId)
+    } else {
+      try {
+        const roomRef = doc(db, "rooms", roomId)
+        const existingRoom = await getDoc(roomRef)
+        existingViewers = existingRoom.exists() ? (existingRoom.data()?.viewers || 0) : 0
+      } catch (error: any) {
+        console.warn("Could not fetch existing room data, using 0 viewers:", error.message)
+        // Continue with 0 viewers if we can't fetch the data
+      }
+    }
+    
     const gameState = {
       player: {
         x: Number(mapData.playerStart.x),
@@ -71,13 +90,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
       maze: JSON.stringify(mapData.maze),
       gameStatus: "playing" as const,
-      viewers: 0,
+      viewers: existingViewers, // Preserve existing viewer count
       lastUpdate: Date.now(),
       timeLeft: 120,
     }
     
     console.log("Game state created, updating room:", roomId)
-    const roomRef = doc(db, "rooms", roomId)
+    
+    // If Firebase quota is exceeded, return game state without saving to Firestore
+    if (isFirebaseQuotaExceeded()) {
+      console.log("Firebase quota exceeded, returning game state without saving to Firestore")
+      return NextResponse.json({ 
+        ...gameState, 
+        fallback: true,
+        warning: "Using fallback mode due to service limits" 
+      })
+    }
     
     const firestoreData = {
       player: gameState.player,
@@ -92,9 +120,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))
-    // Use setDoc with merge option to handle existing rooms
-    await setDoc(roomRef, firestoreData, { merge: true })
-    console.log("Game started successfully")
+    
+    try {
+      // Create roomRef here since we know Firebase is working
+      const roomRef = doc(db, "rooms", roomId)
+      // Use setDoc with merge option to handle existing rooms
+      await setDoc(roomRef, firestoreData, { merge: true })
+      console.log("Game started successfully")
+    } catch (error: any) {
+      // Handle Firebase quota exceeded error
+      if (error.code === 'resource-exhausted') {
+        console.warn('Firebase quota exceeded, returning game state without saving to Firestore')
+        return NextResponse.json({ 
+          ...gameState, 
+          fallback: true,
+          warning: "Using fallback mode due to service limits" 
+        })
+      }
+      throw error // Re-throw other errors
+    }
     
     return NextResponse.json(gameState)
   } catch (error) {

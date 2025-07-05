@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/firebase"
 import { doc, getDoc, updateDoc } from "firebase/firestore"
+import { isFirebaseQuotaExceeded } from "../presence/route"
 
 // Enemy movement function
 function moveEnemies(gameState: any, maze: number[][]) {
@@ -80,6 +81,15 @@ function moveEnemies(gameState: any, maze: number[][]) {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ roomId: string }> }) {
   const { roomId } = await params;
   try {
+    // If Firebase quota is exceeded, return a simple response to reduce load
+    if (isFirebaseQuotaExceeded()) {
+      console.log("Firebase quota exceeded, skipping enemy movement")
+      return NextResponse.json({ 
+        status: "fallback",
+        message: "Using fallback mode due to service limits"
+      })
+    }
+    
     const roomRef = doc(db, "rooms", roomId)
     const roomSnap = await getDoc(roomRef)
     if (!roomSnap.exists()) {
@@ -122,11 +132,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     }
     
-    await updateDoc(roomRef, {
-      enemies: gameState.enemies,
-      player: gameState.player,
-      gameStatus: gameState.gameStatus
-    })
+    try {
+      await updateDoc(roomRef, {
+        enemies: gameState.enemies,
+        player: gameState.player,
+        gameStatus: gameState.gameStatus
+      })
+    } catch (error: any) {
+      // Handle Firebase quota exceeded error
+      if (error.code === 'resource-exhausted') {
+        console.warn('Firebase quota exceeded during enemy movement, continuing without update')
+        // Continue without updating Firestore
+      } else {
+        throw error // Re-throw other errors
+      }
+    }
     
     return NextResponse.json(gameState)
   } catch (error: any) {
