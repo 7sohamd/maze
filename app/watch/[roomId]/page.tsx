@@ -54,7 +54,7 @@ async function waitForAptosTx(txHash: string, maxAttempts = 20, interval = 1000)
 export default function WatchPage() {
   const params = useParams()
   const router = useRouter()
-  const roomId = params.roomId as string
+  const roomId = params?.roomId as string
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({})
@@ -963,17 +963,71 @@ export default function WatchPage() {
                 </CardContent>
               </Card>
               {/* Wallet Connect and Recipient Address */}
-              <div className="mb-4 flex flex-col gap-2">
-                {!petraWallet.isConnected ? (
-                  <Button onClick={petraWallet.connect} disabled={petraWallet.loading}>
-                    {petraWallet.loading ? "Connecting..." : "Connect Petra Wallet"}
-                  </Button>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="text-green-500 font-bold">Wallet Connected: {petraWallet.address?.slice(0, 8)}...{petraWallet.address?.slice(-4)}</div>
-                  </div>
-                )}
-              </div>
+              <Card className="bg-gray-800 border-gray-700">
+                <CardHeader>
+                  <CardTitle className="text-white press-start-bold">Connect Wallet</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!petraWallet.isConnected ? (
+                    <div>
+                      {typeof window === 'undefined' ? (
+                        <div className="text-center text-white/80 text-sm">Loading...</div>
+                      ) : !petraWallet.isPetraAvailable ? (
+                        <div className="text-center">
+                          <div className="text-red-400 mb-2 text-sm">
+                            Petra wallet extension not detected
+                          </div>
+                          <div className="text-white/80 text-xs mb-3">
+                            Please install the Petra wallet extension from{" "}
+                            <a 
+                              href="https://petra.app/" 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300 underline"
+                            >
+                              petra.app
+                            </a>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button 
+                          onClick={async () => {
+                            try {
+                              await petraWallet.connect();
+                            } catch (error) {
+                              console.error('Wallet connection error:', error);
+                            }
+                          }} 
+                          disabled={petraWallet.loading}
+                          className="w-full"
+                        >
+                          {petraWallet.loading ? "Connecting..." : "Connect Petra Wallet"}
+                        </Button>
+                      )}
+                      
+                      {petraWallet.error && (
+                        <div className="text-red-400 text-xs bg-red-900/20 p-2 rounded">
+                          {petraWallet.error}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <div className="text-green-500 font-bold text-sm">
+                        Wallet Connected: {petraWallet.address?.slice(0, 8)}...{petraWallet.address?.slice(-4)}
+                      </div>
+                      <Button 
+                        onClick={petraWallet.disconnect}
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                      >
+                        Disconnect
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
               {/* Sabotage Actions */}
               <Card className="bg-red-400/30 backdrop-blur-sm border-red-400/50 shadow-xl">
                 <CardHeader>

@@ -225,6 +225,8 @@ export default function HomePage() {
           </Button>
         </div>
 
+
+
         {/* Features */}
         <div className="grid md:grid-cols-3 gap-8 mb-16">
           <Card className="bg-white/10 backdrop-blur-sm border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300">

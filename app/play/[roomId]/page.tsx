@@ -126,9 +126,9 @@ const CelebrationUI = ({ onClose, gameState, router }: { onClose: () => void, ga
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
-  const roomId = params.roomId as string
+  const roomId = params?.roomId as string
   const searchParams = useSearchParams()
-  const difficulty = searchParams.get('difficulty') || 'medium'
+  const difficulty = searchParams?.get('difficulty') || 'medium'
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<number | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -1062,13 +1062,51 @@ export default function GamePage() {
   if (!playerWallet.isConnected) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <div className="text-6xl mb-4 animate-pulse">🦊</div>
           <div className="text-white text-2xl font-bold mb-4">Connect your Petra Wallet to play</div>
-          <Button onClick={playerWallet.connect} disabled={playerWallet.loading}>
-            {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
-          </Button>
-          {playerWallet.error && <div className="text-red-500 mt-2">{playerWallet.error}</div>}
+          
+          {/* Show loading state during hydration */}
+          {typeof window === 'undefined' ? (
+            <div className="text-white/80">Loading...</div>
+          ) : !playerWallet.isPetraAvailable ? (
+            <div className="mb-6">
+              <div className="text-red-400 mb-4">
+                Petra wallet extension not detected
+              </div>
+              <div className="text-white/80 text-sm mb-4">
+                Please install the Petra wallet extension from{" "}
+                <a 
+                  href="https://petra.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  petra.app
+                </a>
+              </div>
+            </div>
+          ) : (
+            <Button 
+              onClick={async () => {
+                try {
+                  await playerWallet.connect();
+                } catch (error) {
+                  console.error('Wallet connection error:', error);
+                }
+              }} 
+              disabled={playerWallet.loading}
+              className="mb-4"
+            >
+              {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
+            </Button>
+          )}
+          
+          {playerWallet.error && (
+            <div className="text-red-400 mt-2 text-sm bg-red-900/20 p-3 rounded">
+              {playerWallet.error}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1080,8 +1118,9 @@ export default function GamePage() {
         <div className="text-white text-xl">Loading game...</div>
       </div>
     );
-  } else {
-    content = (
+  }
+
+  return (
       <div
         className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 p-4 relative overflow-hidden"
       tabIndex={0}
@@ -1148,7 +1187,7 @@ export default function GamePage() {
               <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
             <Users className="h-4 w-4" />
                 <span className="font-semibold">
-                  {gameState.viewers !== undefined ? gameState.viewers : 0} viewers
+                  {gameState?.viewers !== undefined ? gameState.viewers : 0} viewers
                 </span>
           </div>
               <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
@@ -1201,13 +1240,13 @@ export default function GamePage() {
               </CardContent>
             </Card>
 
-            {gameState.gameStatus !== "playing" && (
+            {gameState?.gameStatus !== "playing" && (
                 <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
                   <CardContent className="p-8 text-center">
                     <div className="text-3xl font-bold text-white mb-4 drop-shadow-lg">
-                    {gameState.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
+                    {gameState?.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
                   </div>
-                    <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState.player.score}</span></div>
+                    <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState?.player.score}</span></div>
                     <Button 
                       onClick={() => router.push("/")} 
                       className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
@@ -1233,22 +1272,22 @@ export default function GamePage() {
                 <div>
                     <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
                       <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
-                      <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
+                      <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState?.player.health}/100</span>
                     </div>
                     <Progress 
-                      value={gameState.player.health} 
+                      value={gameState?.player.health || 0} 
                       className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
                     />
                   </div>
                   <div>
                     <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
                       <span className="font-semibold">⚡ Speed</span>
-                      <span className="font-bold">{Math.round(gameState.player.speed * 100)}%</span>
+                      <span className="font-bold">{Math.round((gameState?.player.speed || 0) * 100)}%</span>
                 </div>
-                    <Progress value={gameState.player.speed * 100} className="h-3 bg-white/30" />
+                    <Progress value={(gameState?.player.speed || 0) * 100} className="h-3 bg-white/30" />
                   </div>
                   <div className="text-center bg-gradient-to-r from-yellow-400 to-orange-500 text-black py-4 rounded-xl font-black text-2xl drop-shadow">
-                    🏆 {gameState.player.score}
+                    🏆 {gameState?.player.score}
                 </div>
               </CardContent>
             </Card>
@@ -1312,9 +1351,6 @@ export default function GamePage() {
           </div>
         </div>
       </div>
-    </div>
+          </div>
     );
-  }
-
-  return content;
 }

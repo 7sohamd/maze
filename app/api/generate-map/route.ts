@@ -96,6 +96,8 @@ function generateMaze(width: number, height: number, extraConnections = 10): num
   return maze
 }
 
+import { NextRequest } from 'next/server';
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
