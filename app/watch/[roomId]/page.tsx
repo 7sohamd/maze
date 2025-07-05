@@ -51,13 +51,10 @@ export default function WatchPage() {
   const [isListening, setIsListening] = useState(false)
   const [showCelebration, setShowCelebration] = useState(false)
   const [voiceSupported, setVoiceSupported] = useState(false)
-  const [manualPlayerAddress, setManualPlayerAddress] = useState("")
+  const [playerWallet, setPlayerWallet] = useState<string | null>(null)
   const [initLoading, setInitLoading] = useState(false);
-  const [playerAddress, setPlayerAddress] = useState<string | null>(null);
   const [fetchStatus, setFetchStatus] = useState<string | null>(null);
   const petraWallet = usePetraWallet();
-  const [recipientAddress, setRecipientAddress] = useState("");
-  const [paying, setPaying] = useState(false);
 
   const sabotageActions: SabotageAction[] = [
     {
@@ -517,19 +514,18 @@ export default function WatchPage() {
       setSabotageMessage("Connect your Petra wallet first.");
       return;
     }
-    if (!isValidAptosAddress(recipientAddress)) {
-      setSabotageMessage("Recipient address is invalid.");
+    if (!playerWallet) {
+      setSabotageMessage("Player wallet not found for this room.");
       return;
     }
-    setPaying(true);
     setSabotageMessage("Paying and sabotaging...");
     try {
-      // 1. Pay the sabotage amount to the input address
+      // 1. Pay the sabotage amount to the player's wallet
       const payload = {
         type: "entry_function_payload",
         function: "0x1::coin::transfer",
         type_arguments: ["0x1::aptos_coin::AptosCoin"],
-        arguments: [recipientAddress, (action.cost * 1e8).toFixed(0)],
+        arguments: [playerWallet, (action.cost * 1e8).toFixed(0)],
       };
       await petraWallet.signAndSubmitTransaction(payload);
       // 2. Call backend to apply sabotage effect
@@ -546,8 +542,6 @@ export default function WatchPage() {
       }
     } catch (err: any) {
       setSabotageMessage("Failed: " + (err.message || err));
-    } finally {
-      setPaying(false);
     }
   };
 
@@ -657,6 +651,7 @@ export default function WatchPage() {
     }
   }
 
+  // Fetch playerWallet from room state
   useEffect(() => {
     const fetchPlayerWallet = async () => {
       try {
@@ -664,7 +659,7 @@ export default function WatchPage() {
         if (res.ok) {
           const data = await res.json();
           if (data.playerWallet) {
-            setManualPlayerAddress(data.playerWallet);
+            setPlayerWallet(data.playerWallet);
           }
         }
       } catch (err) {
@@ -929,8 +924,8 @@ export default function WatchPage() {
                     type="text"
                     className="w-full mb-2 p-2 rounded bg-gray-900 border border-gray-700 text-white press-start-bold"
                     placeholder="Enter player wallet address (0x...)"
-                    value={manualPlayerAddress}
-                    onChange={e => setManualPlayerAddress(e.target.value)}
+                    value={playerWallet || ''}
+                    onChange={e => setPlayerWallet(e.target.value)}
                   />
                   <Button
                     onClick={initializePlayerAccount}
@@ -950,13 +945,6 @@ export default function WatchPage() {
                 ) : (
                   <div className="flex flex-col gap-2">
                     <div className="text-green-500 font-bold">Wallet Connected: {petraWallet.address?.slice(0, 8)}...{petraWallet.address?.slice(-4)}</div>
-                    <input
-                      type="text"
-                      className="w-full p-2 rounded bg-gray-900 border border-gray-700 text-white"
-                      placeholder="Enter recipient address (0x...)"
-                      value={recipientAddress}
-                      onChange={e => setRecipientAddress(e.target.value)}
-                    />
                   </div>
                 )}
               </div>
@@ -1011,7 +999,7 @@ export default function WatchPage() {
                   </div>
                   {sabotageActions.map((action) => {
                     const onCooldown = cooldowns[action.id] > 0
-                    const disabled = onCooldown || !petraWallet.isConnected || paying || gameState.gameStatus !== "playing"
+                    const disabled = onCooldown || !petraWallet.isConnected || gameState.gameStatus !== "playing"
                     return (
                       <Button
                         key={action.id}

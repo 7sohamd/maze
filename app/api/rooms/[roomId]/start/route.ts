@@ -116,7 +116,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       gameStatus: gameState.gameStatus,
       viewers: gameState.viewers,
       lastUpdate: gameState.lastUpdate,
-      timeLeft: gameState.timeLeft
+      timeLeft: gameState.timeLeft,
+      playerWallet, // Store the player's wallet address
     }
     
     console.log("Firestore data:", JSON.stringify(firestoreData, null, 2))

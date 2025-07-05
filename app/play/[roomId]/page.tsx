@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
+import { usePetraWallet } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -57,6 +58,7 @@ export default function GamePage() {
   // Initialize game
   useEffect(() => {
     const initGame = async () => {
+      if (!playerWallet.isConnected) return; // Block until wallet is connected
       try {
         console.log("Initializing game for room:", roomId)
         
@@ -99,7 +101,7 @@ export default function GamePage() {
     }
 
     initGame()
-  }, [roomId, router])
+  }, [roomId, router, playerWallet.isConnected, playerWallet.address])
 
   // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
@@ -949,6 +951,21 @@ export default function GamePage() {
         </div>
         <div className="absolute bottom-10 right-10 text-4xl animate-bounce" style={{ animationDelay: '2s' }}>
           🎊
+        </div>
+      </div>
+    )
+  }
+
+  if (!playerWallet.isConnected) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4 animate-pulse">🦊</div>
+          <div className="text-white text-2xl font-bold mb-4">Connect your Petra Wallet to play</div>
+          <Button onClick={playerWallet.connect} disabled={playerWallet.loading}>
+            {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
+          </Button>
+          {playerWallet.error && <div className="text-red-500 mt-2">{playerWallet.error}</div>}
         </div>
       </div>
     )
