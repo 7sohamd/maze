@@ -1601,33 +1601,6 @@ export default function GamePage() {
             </div>
           </div>
         </div>
-        {/* Leaderboard Section - aligned with game area and sidebar */}
-        <div className="w-full mt-12 flex justify-center">
-          <div className="w-full max-w-5xl">
-            <div className="bg-black/80 rounded-2xl shadow-2xl p-8 border border-yellow-400/40">
-              <div className="text-yellow-400 text-2xl font-bold mb-6 flex items-center gap-2">
-                🏆 Leaderboard
-              </div>
-              <ol className="space-y-3">
-                {leaderboard.length === 0 && (
-                  <li className="text-white/70 text-center">No scores yet.</li>
-                )}
-                {leaderboard.map((user: any, i: number) => (
-                  <li key={user.email || i} className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-3">
-                    <span className="text-lg font-bold text-yellow-300 w-6 text-center">{i + 1}</span>
-                    {user.photoURL && typeof user.photoURL === 'string' && user.photoURL.startsWith('http') ? (
-                      <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full border-2 border-yellow-400 object-cover" />
-                    ) : (
-                      <span className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-black font-bold">{user.displayName?.[0] || '?'}</span>
-                    )}
-                    <span className="flex-1 truncate text-white font-semibold">{user.displayName || user.email}</span>
-                    <span className="text-yellow-200 font-mono text-lg">{user.points}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </div>
         {/* User Info Bar - fixed top right */}
         <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-black/80 px-4 py-2 rounded-xl shadow-lg border border-yellow-400/30 backdrop-blur-md">
           {user.photoURL && typeof user.photoURL === 'string' && user.photoURL.startsWith('http') ? (
