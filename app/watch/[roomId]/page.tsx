@@ -8,7 +8,6 @@ import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Eye, Coins, Zap, Mic, Users, Gamepad2 } from "lucide-react"
 import Head from "next/head"
 import { AptosClient } from "aptos"
-import { usePetraWallet, isValidAptosAddress } from "@/hooks/use-petra-wallet"
 
 interface GameState {
   player: {
@@ -92,7 +91,8 @@ export default function WatchPage() {
   const [playerWallet, setPlayerWallet] = useState<string | null>(null)
   const [initLoading, setInitLoading] = useState(false);
   const [fetchStatus, setFetchStatus] = useState<string | null>(null);
-  const petraWallet = usePetraWallet();
+  const [viewerWallet, setViewerWallet] = useState<string | null>(null);
+  const [petraLoading, setPetraLoading] = useState(false);
 
   const sabotageActions: SabotageAction[] = [
     {
@@ -548,7 +548,7 @@ export default function WatchPage() {
   };
 
   const handleSabotage = async (action: SabotageAction) => {
-    if (!petraWallet.isConnected) {
+    if (!viewerWallet) {
       setSabotageMessage("Connect your Petra wallet first.");
       return;
     }
@@ -565,7 +565,6 @@ export default function WatchPage() {
     const checkData = await checkRes.json();
     if (!checkData.allowed) {
       setSabotageMessage(checkData.reason || "This sabotage is not allowed.");
-      // Optionally block the button for a few seconds
       setBlockedSabotages(prev => ({ ...prev, [action.id]: true }));
       setTimeout(() => {
         setBlockedSabotages(prev => ({ ...prev, [action.id]: false }));
@@ -581,12 +580,13 @@ export default function WatchPage() {
         type_arguments: ["0x1::aptos_coin::AptosCoin"],
         arguments: [playerWallet, (action.cost * 1e8).toFixed(0)],
       };
-      const result = await petraWallet.signAndSubmitTransaction(payload);
-      const txHash = result?.hash || result?.transactionHash;
+      const txResult = await (window as any).petra.signAndSubmitTransaction(payload);
+      const txHash = txResult?.hash || txResult?.transactionHash;
       if (!txHash) {
         setSabotageMessage("Transaction failed to submit.");
         return;
       }
+      // Wait for confirmation
       setSabotageMessage("Waiting for transaction confirmation...");
       const confirmed = await waitForAptosTx(txHash);
       if (!confirmed) {
@@ -594,15 +594,14 @@ export default function WatchPage() {
         return;
       }
       // 3. Call backend to apply sabotage effect
-      const res = await fetch(`/api/rooms/${roomId}/sabotage`, {
+      const result = await fetch(`/api/rooms/${roomId}/sabotage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: action.id }),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        setSabotageMessage("Payment succeeded but sabotage failed: " + (data.error || res.statusText));
-        // Block this sabotage button for 5 seconds
+      if (!result.ok) {
+        const data = await result.json();
+        setSabotageMessage("Payment succeeded but sabotage failed: " + (data.error || result.statusText));
         setBlockedSabotages(prev => ({ ...prev, [action.id]: true }));
         setTimeout(() => {
           setBlockedSabotages(prev => ({ ...prev, [action.id]: false }));
@@ -740,17 +739,21 @@ export default function WatchPage() {
     fetchPlayerWallet();
   }, [roomId]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.petra && window.petra.isConnected) {
+  const connectPetra = async () => {
+    if (typeof window !== 'undefined' && (window as any).petra) {
+      setPetraLoading(true);
       try {
-        window.petra.disconnect();
-        setPlayerWallet(null);
+        const response = await (window as any).petra.connect();
+        setViewerWallet(response.address);
       } catch (e) {
-        // Ignore disconnect errors
-        console.warn("Petra disconnect error:", e);
+        alert("Failed to connect Petra");
+      } finally {
+        setPetraLoading(false);
       }
+    } else {
+      alert("Petra wallet not found");
     }
-  }, []);
+  };
 
   if (loading) {
     return (
@@ -1011,13 +1014,13 @@ export default function WatchPage() {
               </Card>
               {/* Wallet Connect and Recipient Address */}
               <div className="mb-2 flex flex-col gap-2">
-                {!petraWallet.isConnected ? (
-                  <Button onClick={petraWallet.connect} disabled={petraWallet.loading} className="text-base py-2">
-                    {petraWallet.loading ? "Connecting..." : "Connect Petra Wallet"}
+                {!viewerWallet ? (
+                  <Button onClick={connectPetra} disabled={petraLoading} className="text-base py-2">
+                    {petraLoading ? "Connecting..." : "Connect Petra Wallet"}
                   </Button>
                 ) : (
                   <div className="flex flex-col gap-1">
-                    <div className="text-green-500 font-medium text-xs truncate">Wallet Connected: {petraWallet.address?.slice(0, 8)}...{petraWallet.address?.slice(-4)}</div>
+                    <div className="text-green-500 font-medium text-xs truncate">Wallet Connected: {viewerWallet.slice(0, 8)}...{viewerWallet.slice(-4)}</div>
                   </div>
                 )}
               </div>
@@ -1077,7 +1080,7 @@ export default function WatchPage() {
                     if (action.id === "damage") logicPossible = canDamage(gameState);
                     if (action.id === "enemy") logicPossible = canSpawnEnemy(gameState);
                     if (action.id === "slow") logicPossible = canSlow(gameState);
-                    const disabled = onCooldown || !petraWallet.isConnected || gameState.gameStatus !== "playing" || !logicPossible;
+                    const disabled = onCooldown || !viewerWallet || gameState.gameStatus !== "playing" || !logicPossible;
                     return (
                       <Button
                         key={action.id}
