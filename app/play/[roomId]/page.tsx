@@ -31,9 +31,9 @@ interface GameState {
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
-  const roomId = params.roomId as string
+  const roomId = params?.roomId as string
   const searchParams = useSearchParams()
-  const difficulty = searchParams.get('difficulty') || 'medium'
+  const difficulty = searchParams?.get('difficulty') || 'medium'
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<number | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -920,13 +920,51 @@ export default function GamePage() {
   if (!playerWallet.isConnected) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <div className="text-6xl mb-4 animate-pulse">🦊</div>
           <div className="text-white text-2xl font-bold mb-4">Connect your Petra Wallet to play</div>
-          <Button onClick={playerWallet.connect} disabled={playerWallet.loading}>
-            {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
-          </Button>
-          {playerWallet.error && <div className="text-red-500 mt-2">{playerWallet.error}</div>}
+          
+          {/* Show loading state during hydration */}
+          {typeof window === 'undefined' ? (
+            <div className="text-white/80">Loading...</div>
+          ) : !playerWallet.isPetraAvailable ? (
+            <div className="mb-6">
+              <div className="text-red-400 mb-4">
+                Petra wallet extension not detected
+              </div>
+              <div className="text-white/80 text-sm mb-4">
+                Please install the Petra wallet extension from{" "}
+                <a 
+                  href="https://petra.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline"
+                >
+                  petra.app
+                </a>
+              </div>
+            </div>
+          ) : (
+            <Button 
+              onClick={async () => {
+                try {
+                  await playerWallet.connect();
+                } catch (error) {
+                  console.error('Wallet connection error:', error);
+                }
+              }} 
+              disabled={playerWallet.loading}
+              className="mb-4"
+            >
+              {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
+            </Button>
+          )}
+          
+          {playerWallet.error && (
+            <div className="text-red-400 mt-2 text-sm bg-red-900/20 p-3 rounded">
+              {playerWallet.error}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -955,8 +993,6 @@ export default function GamePage() {
   // Show win popup with time left
   const showWin = gameState.gameStatus === "won"
   const showLose = gameState.gameStatus === "lost"
-  
-
 
   return (
     <div
@@ -1041,8 +1077,8 @@ export default function GamePage() {
               <div className="text-4xl font-black mb-4">GAME OVER</div>
               <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
               <div className="text-lg mb-6">Better luck next time!</div>
-              <Button 
-                onClick={() => router.push("/")} 
+              <Button
+                onClick={() => router.push("/")}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
               >
                 🎮 Try Again
@@ -1107,9 +1143,9 @@ export default function GamePage() {
                     <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
                     <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
                   </div>
-                  <Progress 
-                    value={gameState.player.health} 
-                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
+                  <Progress
+                    value={gameState.player.health}
+                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`}
                   />
                 </div>
                 <div>
