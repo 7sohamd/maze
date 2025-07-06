@@ -64,9 +64,6 @@ export function usePetraWallet() {
     return (window as any).aptos.signAndSubmitTransaction({ payload });
   }, []);
 
-  // Check if Petra is available
-  const isPetraAvailable = typeof window !== 'undefined' && !!(window as any).aptos;
-
   return {
     isConnected,
     address,
@@ -75,6 +72,5 @@ export function usePetraWallet() {
     connect,
     disconnect,
     signAndSubmitTransaction,
-    isPetraAvailable,
   };
 } 

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
-import { usePetraWallet } from "@/hooks/use-petra-wallet"
+import { db } from "@/lib/firebase"
+import { doc, setDoc } from "firebase/firestore"
 
 interface GameState {
   player: {
@@ -31,9 +32,8 @@ interface GameState {
 export default function GamePage() {
   const params = useParams()
   const router = useRouter()
-  const roomId = params?.roomId as string
+  const roomId = params?.roomId ? String(params.roomId) : null
   const searchParams = useSearchParams()
-  const difficulty = searchParams?.get('difficulty') || 'medium'
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<number | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -50,15 +50,22 @@ export default function GamePage() {
   const [playerHit, setPlayerHit] = useState(false)
   const [isMoving, setIsMoving] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  const playerWallet = usePetraWallet()
+  const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const [petraLoading, setPetraLoading] = useState(false)
   const [lastMovement, setLastMovement] = useState<{x: number, y: number} | null>(null)
   const movementQueueRef = useRef<Array<{x: number, y: number}>>([])
   const isProcessingMovementRef = useRef(false)
+  const [selectedMode, setSelectedMode] = useState<string>("")
+  const difficulty = selectedMode || searchParams?.get('difficulty') || 'medium'
+
+  if (!roomId) {
+    return <div>Invalid room</div>;
+  }
 
   // Initialize game
   useEffect(() => {
     const initGame = async () => {
-      if (!playerWallet.isConnected) return; // Block until wallet is connected
+      if (!walletAddress) return; // Block until wallet is connected
       try {
         console.log("Initializing game for room:", roomId)
         
@@ -70,7 +77,7 @@ export default function GamePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             difficulty,
-            playerWallet: playerWallet.address 
+            playerWallet: walletAddress 
           }),
         })
         console.log("Start response status:", response.status)
@@ -101,7 +108,7 @@ export default function GamePage() {
     }
 
     initGame()
-  }, [roomId, router, playerWallet.isConnected, playerWallet.address])
+  }, [roomId, router, walletAddress])
 
   // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
@@ -917,53 +924,53 @@ export default function GamePage() {
     )
   }
 
-  if (!playerWallet.isConnected) {
+  const connectPetra = async () => {
+    if (typeof window !== 'undefined' && (window as any).petra) {
+      setPetraLoading(true)
+      try {
+        const response = await (window as any).petra.connect()
+        setWalletAddress(response.address)
+        // Save to Firestore
+        await setDoc(doc(db, "rooms", roomId), { walletAddress: response.address }, { merge: true })
+      } catch (e) {
+        alert("Failed to connect Petra")
+      } finally {
+        setPetraLoading(false)
+      }
+    } else {
+      alert("Petra wallet not found")
+    }
+  }
+
+  // Force disconnect Petra wallet on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).petra && (window as any).petra.disconnect) {
+      (window as any).petra.disconnect();
+      setWalletAddress(null);
+    }
+  }, []);
+
+  if (!walletAddress) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-6xl mb-4 animate-pulse">🦊</div>
-          <div className="text-white text-2xl font-bold mb-4">Connect your Petra Wallet to play</div>
-          
-          {/* Show loading state during hydration */}
-          {typeof window === 'undefined' ? (
-            <div className="text-white/80">Loading...</div>
-          ) : !playerWallet.isPetraAvailable ? (
-            <div className="mb-6">
-              <div className="text-red-400 mb-4">
-                Petra wallet extension not detected
-              </div>
-              <div className="text-white/80 text-sm mb-4">
-                Please install the Petra wallet extension from{" "}
-                <a 
-                  href="https://petra.app/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 underline"
-                >
-                  petra.app
-                </a>
-              </div>
-            </div>
-          ) : (
-            <Button 
-              onClick={async () => {
-                try {
-                  await playerWallet.connect();
-                } catch (error) {
-                  console.error('Wallet connection error:', error);
-                }
-              }} 
-              disabled={playerWallet.loading}
-              className="mb-4"
-            >
-              {playerWallet.loading ? "Connecting..." : "Connect Wallet"}
+      <div className="min-h-screen p-4 flex flex-col items-center justify-center" style={{ backgroundImage: `url('/arcade.gif')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+        <div className="absolute inset-0 bg-black/70 z-0" />
+        <div className="relative z-10 flex flex-col items-center gap-8">
+          <div className="text-white text-4xl font-regular mb-4">Choose Game Mode</div>
+          <div className="flex gap-4 mb-6">
+            {['easy', 'medium', 'hard'].map(mode => (
+              <button
+                key={mode}
+                onClick={() => setSelectedMode(mode)}
+                className={`px-6 py-3 rounded-xl text-lg font-thin border-1 transition-all duration-150 ${selectedMode === mode ? 'bg-yellow-400 text-black border-yellow-500 scale-105' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-black hover:border-yellow-500'}`}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          {selectedMode && (
+            <Button onClick={connectPetra} disabled={petraLoading} className="text-lg px-8 py-3">
+              {petraLoading ? "Connecting..." : "Connect Petra Wallet"}
             </Button>
-          )}
-          
-          {playerWallet.error && (
-            <div className="text-red-400 mt-2 text-sm bg-red-900/20 p-3 rounded">
-              {playerWallet.error}
-            </div>
           )}
         </div>
       </div>
@@ -993,15 +1000,25 @@ export default function GamePage() {
   // Show win popup with time left
   const showWin = gameState.gameStatus === "won"
   const showLose = gameState.gameStatus === "lost"
+  
+
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 p-4 relative overflow-hidden"
+      className="min-h-screen p-4 relative overflow-hidden"
       tabIndex={0}
       onFocus={() => console.log("Game focused - ready for input!")}
-      style={{ outline: "none" }}
+      style={{
+        outline: "none",
+        backgroundImage: `url('/arcade.gif')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
     >
-      <div className="max-w-6xl mx-auto">
+      {/* Overlay for readability */}
+      <div className="absolute inset-0 bg-black/70 pointer-events-none z-0" />
+      <div className="relative z-10 max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <Button
             onClick={() => router.push("/")}
@@ -1013,9 +1030,6 @@ export default function GamePage() {
           </Button>
           
           <div className="text-white text-2xl font-bold flex items-center gap-3">
-            <div className="bg-gradient-to-r from-yellow-400 to-orange-500 text-black px-4 py-2 rounded-full font-black">
-              🟡 PACMAN
-            </div>
             <div className={`px-3 py-1 rounded-full font-bold text-sm ${
               difficulty === 'easy' ? 'bg-green-500 text-white' :
               difficulty === 'medium' ? 'bg-yellow-500 text-black' :
@@ -1077,8 +1091,8 @@ export default function GamePage() {
               <div className="text-4xl font-black mb-4">GAME OVER</div>
               <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
               <div className="text-lg mb-6">Better luck next time!</div>
-              <Button
-                onClick={() => router.push("/")}
+              <Button 
+                onClick={() => router.push("/")} 
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
               >
                 🎮 Try Again
@@ -1143,9 +1157,9 @@ export default function GamePage() {
                     <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
                     <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
                   </div>
-                  <Progress
-                    value={gameState.player.health}
-                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`}
+                  <Progress 
+                    value={gameState.player.health} 
+                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
                   />
                 </div>
                 <div>
