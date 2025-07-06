@@ -12,6 +12,10 @@
 
 🔗 **Play it now:** [Pac-Rupt Live on Vercel](https://maze-plum.vercel.app/)
 
+**MOVE modules:** maze_game and room_registry. 
+
+**Contract Address** : 0x610b5f5dd4e53876a000fc05432f119bd7763abdb62efc034393ee63055de1f9
+
 ---
 
 ## 🎯 Project Overview
