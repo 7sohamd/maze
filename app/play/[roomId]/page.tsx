@@ -60,6 +60,11 @@ export default function GamePage() {
   const [selectedMode, setSelectedMode] = useState<string>("")
   const difficulty = selectedMode || searchParams?.get('difficulty') || 'medium'
   
+  // Leaderboard state (must be declared before any useEffect that uses it)
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  // User state (must be declared before any useEffect that uses it)
+  const [user, setUser] = useState<any>(null);
+  
   // Proper hit effect management
   const triggerHitEffect = useCallback(() => {
     // Clear any existing timeout
@@ -1607,7 +1612,7 @@ export default function GamePage() {
                 {leaderboard.length === 0 && (
                   <li className="text-white/70 text-center">No scores yet.</li>
                 )}
-                {leaderboard.map((user, i) => (
+                {leaderboard.map((user: any, i: number) => (
                   <li key={user.email || i} className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-3">
                     <span className="text-lg font-bold text-yellow-300 w-6 text-center">{i + 1}</span>
                     {user.photoURL && typeof user.photoURL === 'string' && user.photoURL.startsWith('http') ? (
