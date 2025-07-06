@@ -57,6 +57,12 @@ export default function GamePage() {
   const isProcessingMovementRef = useRef(false)
   const [selectedMode, setSelectedMode] = useState<string>("")
   const difficulty = selectedMode || searchParams?.get('difficulty') || 'medium'
+  
+  // Client-side prediction for smoother movement
+  const [predictedPosition, setPredictedPosition] = useState<{x: number, y: number} | null>(null)
+  const pendingMovesRef = useRef<Array<{id: number, movement: {x: number, y: number}, timestamp: number}>>([])
+  const moveIdRef = useRef(0)
+  const lastConfirmedPositionRef = useRef<{x: number, y: number} | null>(null)
 
   if (!roomId) {
     return <div>Invalid room</div>;
@@ -113,6 +119,11 @@ export default function GamePage() {
   // Handle keyboard input - ROBUST VERSION
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Stop input if game is won or lost
+      if (gameState?.gameStatus === "won" || gameState?.gameStatus === "lost") {
+        return
+      }
+      
       // Only handle movement keys
       const validKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S']
       if (!validKeys.includes(e.key)) return
@@ -139,6 +150,11 @@ export default function GamePage() {
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      // Stop input if game is won or lost
+      if (gameState?.gameStatus === "won" || gameState?.gameStatus === "lost") {
+        return
+      }
+      
       // Only handle movement keys
       const validKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S']
       if (!validKeys.includes(e.key)) return
@@ -160,12 +176,13 @@ export default function GamePage() {
       window.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("keyup", handleKeyUp)
     }
-  }, [])
+  }, [gameState?.gameStatus])
 
   // Add mouse/touch controls - ROBUST VERSION
   const handleCanvasClick = useCallback(
     async (e: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!gameState || !canvasRef.current || isMoving) return
+      // Stop input if game is won or lost
+      if (!gameState || gameState.gameStatus === "won" || gameState.gameStatus === "lost" || !canvasRef.current || isMoving) return
 
       // Clear movement queue to prevent conflicts
       movementQueueRef.current = []
@@ -204,15 +221,17 @@ export default function GamePage() {
     setIsClient(true)
   }, [])
 
-  // Game loop function - ROBUST VERSION
+  // Game loop function - ULTRA SMOOTH VERSION with client-side prediction
   const updateGame = useCallback(async () => {
     if (!gameState || gameState.gameStatus !== "playing" || isProcessingMovementRef.current) {
       return;
     }
     if (movementQueueRef.current.length === 0) return;
+    
     const now = Date.now();
     const timeSinceLastMove = now - (lastMoveTimeRef.current || 0);
     if (timeSinceLastMove < 50) return;
+    
     const movement = movementQueueRef.current.shift()!;
     if (lastMovement) {
       const isOpposite = (movement.x !== 0 && movement.x === -lastMovement.x) ||
@@ -221,9 +240,11 @@ export default function GamePage() {
         return;
       }
     }
+    
     isProcessingMovementRef.current = true;
     setIsMoving(true);
     lastMoveTimeRef.current = now;
+    
     // Parse maze for collision detection
     let maze: number[][] = gameState.maze as any;
     if (typeof maze === "string") {
@@ -235,9 +256,12 @@ export default function GamePage() {
         return;
       }
     }
+    
     // Check for wall/obstacle before moving
-    const newX = gameState.player.x + movement.x;
-    const newY = gameState.player.y + movement.y;
+    const currentPos = predictedPosition || { x: gameState.player.x, y: gameState.player.y };
+    const newX = currentPos.x + movement.x;
+    const newY = currentPos.y + movement.y;
+    
     const hitWall =
       newX < 0 ||
       newX >= maze[0].length ||
@@ -245,8 +269,21 @@ export default function GamePage() {
       newY >= maze.length ||
       maze[newY][newX] === 1 ||
       gameState.obstacles.some((obs) => obs.x === newX && obs.y === newY);
+    
     if (!hitWall) {
-      // Only update after server confirmation
+      // Client-side prediction: immediately update visual position
+      const predictedPos = { x: newX, y: newY };
+      setPredictedPosition(predictedPos);
+      
+      // Add to pending moves for server reconciliation
+      const moveId = ++moveIdRef.current;
+      pendingMovesRef.current.push({
+        id: moveId,
+        movement,
+        timestamp: now
+      });
+      
+      // Send to server
       fetch(`/api/rooms/${roomId}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -259,11 +296,27 @@ export default function GamePage() {
           throw new Error("Move failed");
         })
         .then((newState) => {
+          // Server confirmed the move
           setGameState(newState);
           setLastMovement(movement);
+          
+          // Remove confirmed move from pending
+          pendingMovesRef.current = pendingMovesRef.current.filter(move => move.id !== moveId);
+          
+          // Update last confirmed position
+          lastConfirmedPositionRef.current = { x: newState.player.x, y: newState.player.y };
+          
+          // If predicted position matches server position, clear prediction
+          if (Math.abs(newState.player.x - predictedPos.x) < 0.1 && 
+              Math.abs(newState.player.y - predictedPos.y) < 0.1) {
+            setPredictedPosition(null);
+          }
         })
         .catch((error) => {
           console.log("Move sync error:", error);
+          // On error, revert prediction and remove from pending
+          setPredictedPosition(lastConfirmedPositionRef.current || { x: gameState.player.x, y: gameState.player.y });
+          pendingMovesRef.current = pendingMovesRef.current.filter(move => move.id !== moveId);
         })
         .finally(() => {
           setTimeout(() => {
@@ -275,7 +328,27 @@ export default function GamePage() {
       isProcessingMovementRef.current = false;
       setIsMoving(false);
     }
-  }, [gameState, roomId, lastMovement]);
+  }, [gameState, roomId, lastMovement, predictedPosition]);
+
+  // Server reconciliation - clean up old pending moves
+  useEffect(() => {
+    if (!gameState) return;
+    
+    const now = Date.now();
+    const maxPendingTime = 5000; // 5 seconds max pending time
+    
+    // Remove old pending moves
+    pendingMovesRef.current = pendingMovesRef.current.filter(move => 
+      now - move.timestamp < maxPendingTime
+    );
+    
+    // If we have too many pending moves, clear prediction to prevent desync
+    if (pendingMovesRef.current.length > 10) {
+      console.log("[Game] Too many pending moves, clearing prediction");
+      setPredictedPosition(null);
+      pendingMovesRef.current = [];
+    }
+  }, [gameState]);
 
   // Game loop - ULTRA SMOOTH VERSION
   useEffect(() => {
@@ -283,6 +356,15 @@ export default function GamePage() {
 
     let interval: NodeJS.Timeout | null = null
     let enemyMoveInterval: NodeJS.Timeout | null = null
+
+    // Stop all game processes if game is won or lost
+    if (gameState.gameStatus === "won" || gameState.gameStatus === "lost") {
+      console.log(`[Game] Game ${gameState.gameStatus}, stopping all game processes`)
+      return () => {
+        if (interval) clearInterval(interval);
+        if (enemyMoveInterval) clearInterval(enemyMoveInterval);
+      };
+    }
 
     // Ultra-smooth game loop at 60 FPS
     interval = setInterval(updateGame, 16) // ~60 FPS (1000ms / 60 = 16.67ms)
@@ -359,6 +441,12 @@ export default function GamePage() {
     let consecutiveFailures = 0;
     const maxFailures = 3;
     
+    // Stop ping measurement if game is won or lost
+    if (gameState?.gameStatus === "won" || gameState?.gameStatus === "lost") {
+      console.log(`[Game] Game ${gameState.gameStatus}, stopping ping measurement`)
+      return () => {};
+    }
+    
     const measurePing = async () => {
       const start = Date.now();
       try {
@@ -417,7 +505,7 @@ export default function GamePage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [gameState?.gameStatus]);
 
   // Render game - MODERN VERSION
   useEffect(() => {
@@ -602,9 +690,10 @@ export default function GamePage() {
       ctx.shadowBlur = 0
     })
 
-    // Draw player with Pacman design
-    const playerX = gameState.player.x * cellSize + cellSize / 2
-    const playerY = gameState.player.y * cellSize + cellSize / 2
+    // Draw player with Pacman design - use predicted position for smoother movement
+    const playerPos = predictedPosition || { x: gameState.player.x, y: gameState.player.y };
+    const playerX = playerPos.x * cellSize + cellSize / 2
+    const playerY = playerPos.y * cellSize + cellSize / 2
     const playerRadius = cellSize / 2 - 2
     
     // Enhanced smooth movement effects
@@ -711,6 +800,14 @@ export default function GamePage() {
   useEffect(() => {
     let heartbeat: NodeJS.Timeout | null = null
     let isActive = true
+    
+    // Stop presence system if game is won or lost
+    if (gameState?.gameStatus === "won" || gameState?.gameStatus === "lost") {
+      console.log(`[Game] Game ${gameState.gameStatus}, stopping presence system`)
+      return () => {
+        if (heartbeat) clearInterval(heartbeat)
+      };
+    }
     
     const register = async () => {
       try { 
