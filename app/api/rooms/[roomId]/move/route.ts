@@ -8,11 +8,16 @@ function moveEnemies(gameState: any, maze: number[][]) {
   const difficultySettings = gameState.difficultySettings || { enemyChaseRate: 0.75, enemySpeed: 2 }
   
   gameState.enemies.forEach((enemy: any) => {
-    // Use difficulty-based chase rate
-    const shouldChase = Math.random() < difficultySettings.enemyChaseRate
+    // Calculate distance to player
+    const distanceToPlayer = Math.abs(enemy.x - player.x) + Math.abs(enemy.y - player.y);
+    
+    // If enemy is very close to player (distance 1 or 0), increase random movement chance
+    const isCloseToPlayer = distanceToPlayer <= 1;
+    const randomChance = isCloseToPlayer ? 0.8 : 0.3; // 80% random movement when close, 30% normally
+    const shouldChase = Math.random() > randomChance;
     
     let direction
-    if (shouldChase) {
+    if (shouldChase && !isCloseToPlayer) {
       // Calculate direction towards player
       const dx = player.x - enemy.x
       const dy = player.y - enemy.y
