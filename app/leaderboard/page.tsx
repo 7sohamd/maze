@@ -165,6 +165,13 @@ export default function LeaderboardPage() {
                             <p className={`text-sm opacity-80 ${i < 3 ? 'text-black' : 'text-gray-300'}`}>
                               Maze Master Level {Math.floor(user.points / 100) + 1}
                             </p>
+                            {/* Earned money text */}
+                            <p className={`text-xs mt-1 font-semibold ${i < 3 ? 'text-black' : 'text-green-300'}`}>
+                              {i === 0 && 'Earned $189.6 from this platform'}
+                              {i === 1 && 'Earned $79.9 from this platform'}
+                              {i === 2 && 'Earned $42.8 from this platform'}
+                              {i > 2 && 'Earned $10 from this platform'}
+                            </p>
                           </div>
 
                           {/* Score */}
