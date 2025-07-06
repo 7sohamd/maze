@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
 import { db } from "@/lib/firebase"
-import { doc, setDoc, collection, query, orderBy, limit, getDocs, increment } from "firebase/firestore"
+import { doc, setDoc, collection, query, orderBy, limit, getDocs, increment, getDoc } from "firebase/firestore"
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth'
 
 interface GameState {
@@ -64,6 +64,7 @@ export default function GamePage() {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   // User state (must be declared before any useEffect that uses it)
   const [user, setUser] = useState<any>(null);
+  const [userTotalPoints, setUserTotalPoints] = useState<number | null>(null)
   
   // Proper hit effect management
   const triggerHitEffect = useCallback(() => {
@@ -88,6 +89,8 @@ export default function GamePage() {
   const moveIdRef = useRef(0)
   const lastConfirmedPositionRef = useRef<{x: number, y: number} | null>(null)
   const lastCollisionCheckRef = useRef(0)
+
+  const [localTimer, setLocalTimer] = useState<number | null>(null)
 
   if (!roomId) {
     return <div>Invalid room</div>;
@@ -959,15 +962,16 @@ export default function GamePage() {
     }
   }, [gameState])
 
-  // Smooth timer update every 50ms for more responsive display
+  // Smooth timer update every 250ms for more stable display
   useEffect(() => {
     if (gameState?.gameStatus !== "playing") return;
     const interval = setInterval(() => {
       if (baseTimeLeftRef.current != null && lastUpdateRef.current != null) {
         const elapsed = Math.floor((Date.now() - lastUpdateRef.current) / 1000);
-        setDisplayTimeLeft(Math.max(0, baseTimeLeftRef.current - elapsed));
+        const newTime = Math.max(0, baseTimeLeftRef.current - elapsed);
+        setDisplayTimeLeft(prev => (prev !== newTime ? newTime : prev));
       }
-    }, 50);
+    }, 250);
     return () => clearInterval(interval);
   }, [gameState?.gameStatus]);
 
@@ -1163,12 +1167,10 @@ export default function GamePage() {
               VICTORY!
           </h1>
           
-            {/* Score Display */}
-            <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
-              <div className="text-white/90 text-lg mb-2">Final Score</div>
-              <div className="text-5xl font-black text-white">
-                {gameState?.player.score || 0}
-              </div>
+            {/* Points Earned */}
+            <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-4 border border-white/30">
+              <div className="text-white/90 text-lg mb-2">Points Earned</div>
+              <div className="text-4xl font-black text-green-300">+{getAwardedPoints()}</div>
             </div>
             
             {/* Health Remaining */}
@@ -1178,6 +1180,14 @@ export default function GamePage() {
                 ❤️ {gameState?.player.health || 0}
               </div>
             </div>
+            
+            {/* Total Points */}
+            {userTotalPoints !== null && (
+              <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
+                <div className="text-white/90 text-lg mb-2">Total Points</div>
+                <div className="text-4xl font-black text-yellow-200">{userTotalPoints}</div>
+              </div>
+            )}
             
             {/* Action Buttons */}
             <div className="flex gap-4 justify-center">
@@ -1288,7 +1298,7 @@ export default function GamePage() {
   // Award points and refresh leaderboard on win
   useEffect(() => {
     if (gameState?.gameStatus === "won" && user) {
-      awardPoints(difficulty, user).then(() => {
+      awardPoints(difficulty, user).then(async () => {
         // Refresh leaderboard after awarding points
         const fetchLeaderboard = async () => {
           const q = query(collection(db, 'leaderboard'), orderBy('points', 'desc'), limit(10));
@@ -1296,9 +1306,57 @@ export default function GamePage() {
           setLeaderboard(snapshot.docs.map(doc => doc.data()));
         };
         fetchLeaderboard();
+        // Fetch user's total points
+        const userDoc = await getDoc(doc(db, 'leaderboard', user.uid));
+        if (userDoc.exists()) {
+          setUserTotalPoints(userDoc.data().points || 0);
+        }
       });
     }
   }, [gameState?.gameStatus, user]);
+
+  // In CelebrationUI, show awarded points for difficulty
+  const getAwardedPoints = () => {
+    if (difficulty === "easy") return 25;
+    if (difficulty === "medium") return 50;
+    if (difficulty === "hard") return 100;
+    return 0;
+  };
+
+  // Sync localTimer with gameState.timeLeft, but only if server value is lower
+  useEffect(() => {
+    if (gameState && typeof gameState.timeLeft === 'number') {
+      setLocalTimer(prev => {
+        if (prev === null || gameState.timeLeft < prev) {
+          return gameState.timeLeft;
+        }
+        return prev;
+      });
+    }
+  }, [gameState?.timeLeft]);
+
+  // Local timer countdown for smooth display
+  useEffect(() => {
+    if (gameState?.gameStatus !== 'playing') return;
+    if (localTimer === null) return;
+    const interval = setInterval(() => {
+      setLocalTimer(prev => (prev !== null && prev > 0 ? prev - 1 : prev))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [gameState?.gameStatus, localTimer])
+
+  // Lose the game if timer reaches 0
+  useEffect(() => {
+    if (gameState?.gameStatus === 'playing' && localTimer === 0) {
+      setGameState(prev => prev ? { ...prev, gameStatus: 'lost' } : prev)
+      // Optionally, call the server to update state
+      fetch(`/api/rooms/${roomId}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameStatus: 'lost' })
+      }).catch(() => {})
+    }
+  }, [localTimer, gameState?.gameStatus])
 
   if (!user) {
     return (
@@ -1357,8 +1415,8 @@ export default function GamePage() {
   }
 
   // Timer display
-  const minutes = Math.floor(displayTimeLeft !== null ? displayTimeLeft / 60 : 0)
-  const seconds = Math.floor(displayTimeLeft !== null ? displayTimeLeft % 60 : 0)
+  const minutes = Math.floor((localTimer !== null ? localTimer : 0) / 60)
+  const seconds = Math.floor((localTimer !== null ? localTimer : 0) % 60)
 
   // Show win popup with time left
   const showWin = gameState.gameStatus === "won"
