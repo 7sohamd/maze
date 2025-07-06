@@ -150,11 +150,12 @@ export default function WatchPage() {
     console.log(`[Watch] Already registered: ${sessionStorage.getItem(sessionKey) ? 'YES' : 'NO'}`)
     
     const pollGameState = async () => {
+      if (!roomId) return; // Guard: don't fetch if roomId is not defined
       try {
-        const response = await fetch(`/api/rooms/${roomId}/state`)
+        const response = await fetch(`/api/rooms/${roomId}/state`);
         if (response.ok) {
-          const state = await response.json()
-          console.log(`[Watch] Game state received - viewers: ${state.viewers}, session: ${sessionId}`)
+          const state = await response.json();
+          console.log(`[Watch] Game state received - viewers: ${state.viewers}, session: ${sessionId}`);
           
           // Handle waiting state - show waiting message but don't set gameState to null
           if (state.gameStatus === "waiting") {
