@@ -83,7 +83,13 @@ export default function LandingPage() {
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => router.push("/watch")}>Multiplayer</Button>
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => setShowOptions(true)}>Options</Button>
         <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 press-start-bold" onClick={() => setShowCredits(true)}>Credits</Button>
-        <Button variant="ghost" className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 text-red-400 press-start-bold">Quit Game</Button>
+        <Button 
+          variant="ghost" 
+          className="self-stretch text-white font-bold py-8 text-4xl text-left px-0 text-red-400 press-start-bold"
+          onClick={() => window.open('https://youtu.be/xvFZjo5PgG0?si=QAgFvB7AR-w2l-zo', '_blank')}
+        >
+          Quit Game
+        </Button>
       </section>
 
       {/* Controls Guide Modal */}
