@@ -127,7 +127,7 @@ export default function LandingPage() {
       )}
 
       {/* Face GIF at top right with blend mode */}
-      <div style={{ position: 'fixed', top: 0, right: '15vw', zIndex: 30, pointerEvents: 'none' }}>
+      <div style={{ position: 'fixed', top: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
         <img
           src="/face.gif"
           alt="Face"
