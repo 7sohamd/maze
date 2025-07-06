@@ -298,32 +298,32 @@ export default function GamePage() {
     setIsMoving(true);
     lastMoveTimeRef.current = now;
     
-    // Parse maze for collision detection
+        // Parse maze for collision detection
     let maze: number[][] = gameState.maze as any;
-    if (typeof maze === "string") {
-      try {
+        if (typeof maze === "string") {
+          try {
         maze = JSON.parse(maze);
-      } catch (e) {
+          } catch (e) {
         isProcessingMovementRef.current = false;
         setIsMoving(false);
         return;
-      }
-    }
-    
-    // Check for wall/obstacle before moving
+          }
+        }
+
+        // Check for wall/obstacle before moving
     const currentPos = predictedPosition || { x: gameState.player.x, y: gameState.player.y };
     const newX = currentPos.x + movement.x;
     const newY = currentPos.y + movement.y;
     
-    const hitWall =
-      newX < 0 ||
-      newX >= maze[0].length ||
-      newY < 0 ||
-      newY >= maze.length ||
-      maze[newY][newX] === 1 ||
+        const hitWall =
+          newX < 0 ||
+          newX >= maze[0].length ||
+          newY < 0 ||
+          newY >= maze.length ||
+          maze[newY][newX] === 1 ||
       gameState.obstacles.some((obs) => obs.x === newX && obs.y === newY);
-    
-    if (!hitWall) {
+
+        if (!hitWall) {
       // Client-side prediction: immediately update visual position
       const predictedPos = { x: newX, y: newY };
       setPredictedPosition(predictedPos);
@@ -346,12 +346,12 @@ export default function GamePage() {
       
       // Send to server
       fetch(`/api/rooms/${roomId}/move`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(movement),
-      })
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(movement),
+            })
         .then((response) => {
-          if (response.ok) {
+            if (response.ok) {
             return response.json();
           }
           throw new Error("Move failed");
@@ -500,7 +500,7 @@ export default function GamePage() {
     // Stop all game processes if game is won or lost
     if (gameState.gameStatus === "won" || gameState.gameStatus === "lost") {
       console.log(`[Game] Game ${gameState.gameStatus}, stopping all game processes`)
-      return () => {
+    return () => {
         if (interval) clearInterval(interval);
         if (enemyMoveInterval) clearInterval(enemyMoveInterval);
       };
@@ -510,16 +510,16 @@ export default function GamePage() {
     interval = setInterval(updateGame, 16) // ~60 FPS (1000ms / 60 = 16.67ms)
 
     // State polling for real-time updates
-    const poll = async () => {
+      const poll = async () => {
       // Don't poll if game is not playing
       if (gameState.gameStatus !== "playing") {
         console.log(`[Game] Game status: ${gameState.gameStatus}, skipping state poll`);
         return;
       }
       
-      try {
-        const response = await fetch(`/api/rooms/${roomId}/state`)
-        if (response.ok) {
+        try {
+          const response = await fetch(`/api/rooms/${roomId}/state`)
+          if (response.ok) {
           const newState = await response.json()
           if (newState && !newState.error) {
             // Check if player got hit (health decreased)
@@ -567,34 +567,34 @@ export default function GamePage() {
     const stateInterval = setInterval(poll, pollInterval)
 
     // Enemy movement
-    const moveEnemies = async () => {
+      const moveEnemies = async () => {
       // Don't move enemies if game is not playing
       if (gameState.gameStatus !== "playing") {
         console.log(`[Game] Game status: ${gameState.gameStatus}, skipping enemy movement`);
         return;
       }
       
-      try {
-        // Only call enemy movement if game is properly initialized
-        if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
-          const response = await fetch(`/api/rooms/${roomId}/enemy-move`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" }
-          })
-          if (response.ok) {
-            const newState = await response.json()
-            if (newState && !newState.error) {
-              setGameState(newState)
+        try {
+          // Only call enemy movement if game is properly initialized
+          if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
+            const response = await fetch(`/api/rooms/${roomId}/enemy-move`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" }
+            })
+            if (response.ok) {
+              const newState = await response.json()
+              if (newState && !newState.error) {
+                setGameState(newState)
+              }
             }
           }
+        } catch (error) {
+          console.log("Enemy movement failed:", error)
         }
-      } catch (error) {
-        console.log("Enemy movement failed:", error)
       }
-    }
-    
-    // Only start enemy movement if game is actually playing and room exists
-    if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
+      
+      // Only start enemy movement if game is actually playing and room exists
+      if (gameState.gameStatus === "playing" && gameState.player && gameState.enemies) {
       enemyMoveInterval = setInterval(moveEnemies, 5000) // Reduced from 5000ms to 5000ms (keeping same for now)
     }
     
@@ -925,7 +925,7 @@ export default function GamePage() {
         ctx.fillStyle = `rgba(251, 191, 36, ${particleAlpha})`
         ctx.beginPath()
         ctx.arc(finalPlayerX + particleOffset, finalPlayerY + particleOffset, 2, 0, Math.PI * 2)
-        ctx.fill()
+      ctx.fill()
       }
     }
     
@@ -1155,14 +1155,14 @@ export default function GamePage() {
           <div className="relative z-10">
             {/* Trophy Icon */}
             <div className={`text-8xl mb-6`} style={{ animationDuration: '2s' }}>
-              🏆
-            </div>
-            
+            🏆
+          </div>
+          
             {/* Victory Text */}
             <h1 className="text-4xl font-black text-white mb-4">
               VICTORY!
-            </h1>
-            
+          </h1>
+          
             {/* Score Display */}
             <div className="bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/30">
               <div className="text-white/90 text-lg mb-2">Final Score</div>
@@ -1181,8 +1181,8 @@ export default function GamePage() {
             
             {/* Action Buttons */}
             <div className="flex gap-4 justify-center">
-              <button
-                onClick={onClose}
+          <button
+            onClick={onClose}
                 className="bg-white/20 hover:bg-white/30 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 border border-white/30 backdrop-blur-sm"
               >
                 🎮 Play Again
@@ -1192,8 +1192,8 @@ export default function GamePage() {
                 className="bg-white/20 hover:bg-white/30 text-white font-bold py-3 px-6 rounded-xl transition-all duration-300 transform hover:scale-105 border border-white/30 backdrop-blur-sm"
               >
                 🏠 Home
-              </button>
-            </div>
+          </button>
+        </div>
             
             {/* Celebration Message */}
             <div className="mt-6 text-white">
@@ -1385,219 +1385,219 @@ export default function GamePage() {
         {/* Main Game Area and Sidebar */}
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between mb-6">
-              <Button
-                onClick={() => router.push("/")}
-                variant="outline"
-                className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Home
-              </Button>
-              
-              <div className="text-white text-2xl font-bold flex items-center gap-3">
-                <div className={`px-3 py-1 rounded-full font-bold text-sm ${
-                  difficulty === 'easy' ? 'bg-green-500 text-white' :
-                  difficulty === 'medium' ? 'bg-yellow-500 text-black' :
-                  'bg-red-500 text-white'
-                }`}>
-                  {difficulty.toUpperCase()}
-                </div>
-                <span className="text-white/80">Room:</span>
-                <span className="bg-white/10 px-3 py-1 rounded-lg font-mono">{roomId}</span>
-                <button
-                  onClick={handleCopyRoomCode}
-                  title="Copy Room Code"
-                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  {copied ? (
-                    <Check className="h-5 w-5 text-green-400" />
-                  ) : (
-                    <Copy className="h-5 w-5 text-white/70" />
-                  )}
-                </button>
-                <button
-                  onClick={handleShareInvite}
-                  title="Share Invite Link"
-                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  <Share2 className="h-5 w-5 text-white/70" />
-                </button>
-              </div>
-              
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
-                  <Users className="h-4 w-4" />
+        <div className="flex items-center justify-between mb-6">
+          <Button
+            onClick={() => router.push("/")}
+            variant="outline"
+            className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Home
+          </Button>
+          
+          <div className="text-white text-2xl font-bold flex items-center gap-3">
+            <div className={`px-3 py-1 rounded-full font-bold text-sm ${
+              difficulty === 'easy' ? 'bg-green-500 text-white' :
+              difficulty === 'medium' ? 'bg-yellow-500 text-black' :
+              'bg-red-500 text-white'
+            }`}>
+              {difficulty.toUpperCase()}
+            </div>
+            <span className="text-white/80">Room:</span>
+            <span className="bg-white/10 px-3 py-1 rounded-lg font-mono">{roomId}</span>
+            <button
+              onClick={handleCopyRoomCode}
+              title="Copy Room Code"
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              {copied ? (
+                <Check className="h-5 w-5 text-green-400" />
+              ) : (
+                <Copy className="h-5 w-5 text-white/70" />
+              )}
+            </button>
+            <button
+              onClick={handleShareInvite}
+              title="Share Invite Link"
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <Share2 className="h-5 w-5 text-white/70" />
+            </button>
+          </div>
+          
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
+              <Users className="h-4 w-4" />
                   <span className="font-semibold">
                     {gameState.viewers !== undefined ? gameState.viewers : 0} viewers
                   </span>
-                </div>
-                <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
-                  ⏰ {minutes}:{seconds.toString().padStart(2, "0")}
-                </div>
-                <div className="flex items-center gap-2 text-green-400 font-bold text-lg bg-black/30 px-4 py-2 rounded-full">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  {ping !== null ? `${ping} ms` : "-"}
-                </div>
-              </div>
             </div>
+            <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
+              ⏰ {minutes}:{seconds.toString().padStart(2, "0")}
+            </div>
+            <div className="flex items-center gap-2 text-green-400 font-bold text-lg bg-black/30 px-4 py-2 rounded-full">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              {ping !== null ? `${ping} ms` : "-"}
+            </div>
+          </div>
+        </div>
 
-            {/* Win/Lose Popup */}
-            {showCelebration && (
-              <CelebrationUI onClose={() => {
-                setShowCelebration(false)
-                router.push("/")
-              }} />
-            )}
-            
-            {showLose && (
-              <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/80 backdrop-blur-sm">
-                <div className="bg-gradient-to-br from-red-500 to-red-700 text-white p-12 rounded-3xl shadow-2xl text-center border-4 border-red-300 animate-pulse">
-                  <div className="text-6xl mb-4">💀</div>
-                  <div className="text-4xl font-black mb-4">GAME OVER</div>
-                  <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
-                  <div className="text-lg mb-6">Better luck next time!</div>
+        {/* Win/Lose Popup */}
+        {showCelebration && (
+          <CelebrationUI onClose={() => {
+            setShowCelebration(false)
+            router.push("/")
+          }} />
+        )}
+        
+        {showLose && (
+          <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/80 backdrop-blur-sm">
+            <div className="bg-gradient-to-br from-red-500 to-red-700 text-white p-12 rounded-3xl shadow-2xl text-center border-4 border-red-300 animate-pulse">
+              <div className="text-6xl mb-4">💀</div>
+              <div className="text-4xl font-black mb-4">GAME OVER</div>
+              <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
+              <div className="text-lg mb-6">Better luck next time!</div>
+              <Button 
+                onClick={() => router.push("/")} 
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
+              >
+                🎮 Try Again
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-4 gap-8">
+          {/* Game Canvas */}
+          <div className="lg:col-span-3">
+            <Card className="bg-black/60 border-white/20 shadow-2xl">
+              <CardContent className="p-6">
+                <div className="text-center mb-4">
+                  <h2 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">🎮 Game Arena</h2>
+                  <p className="text-white/90 text-sm drop-shadow">Click on the maze or use arrow keys/WASD to move</p>
+                </div>
+                <div className="flex justify-center overflow-auto">
+                  <div className="inline-block">
+                    <canvas
+                      ref={canvasRef}
+                      onClick={handleCanvasClick}
+                      className="border-4 border-yellow-400 rounded-2xl shadow-2xl cursor-pointer bg-black max-w-full"
+                      style={{ imageRendering: "pixelated" }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {gameState.gameStatus !== "playing" && (
+              <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
+                <CardContent className="p-8 text-center">
+                  <div className="text-3xl font-bold text-white mb-4 drop-shadow-lg">
+                    {gameState.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
+                  </div>
+                  <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState.player.score}</span></div>
                   <Button 
                     onClick={() => router.push("/")} 
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
                   >
-                    🎮 Try Again
+                    🎮 Play Again
                   </Button>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
+          </div>
 
-            <div className="grid lg:grid-cols-4 gap-8">
-              {/* Game Canvas */}
-              <div className="lg:col-span-3">
-                <Card className="bg-black/60 border-white/20 shadow-2xl">
-                  <CardContent className="p-6">
-                    <div className="text-center mb-4">
-                      <h2 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">🎮 Game Arena</h2>
-                      <p className="text-white/90 text-sm drop-shadow">Click on the maze or use arrow keys/WASD to move</p>
-                    </div>
-                    <div className="flex justify-center overflow-auto">
-                      <div className="inline-block">
-                        <canvas
-                          ref={canvasRef}
-                          onClick={handleCanvasClick}
-                          className="border-4 border-yellow-400 rounded-2xl shadow-2xl cursor-pointer bg-black max-w-full"
-                          style={{ imageRendering: "pixelated" }}
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {gameState.gameStatus !== "playing" && (
-                  <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
-                    <CardContent className="p-8 text-center">
-                      <div className="text-3xl font-bold text-white mb-4 drop-shadow-lg">
-                        {gameState.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
-                      </div>
-                      <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState.player.score}</span></div>
-                      <Button 
-                        onClick={() => router.push("/")} 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
-                      >
-                        🎮 Play Again
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Sidebar */}
-              <div className="space-y-6">
-                {/* Player Stats */}
-                <Card className="bg-yellow-400/30 backdrop-blur-sm border-yellow-400/50 shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2 text-xl font-black drop-shadow-lg">
-                      <div className="text-3xl">🟡</div>
-                      Player Stats
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div>
-                      <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
-                        <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
-                        <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
-                      </div>
-                      <Progress 
-                        value={gameState.player.health} 
-                        className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
-                      />
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
-                        <span className="font-semibold">⚡ Speed</span>
-                        <span className="font-bold">{Math.round(gameState.player.speed * 100)}%</span>
-                      </div>
-                      <Progress value={gameState.player.speed * 100} className="h-3 bg-white/30" />
-                    </div>
-                    <div className="text-center bg-gradient-to-r from-yellow-400 to-orange-500 text-black py-4 rounded-xl font-black text-2xl drop-shadow">
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Player Stats */}
+            <Card className="bg-yellow-400/30 backdrop-blur-sm border-yellow-400/50 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2 text-xl font-black drop-shadow-lg">
+                  <div className="text-3xl">🟡</div>
+                  Player Stats
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
+                    <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
+                    <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
+                  </div>
+                  <Progress 
+                    value={gameState.player.health} 
+                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
+                    <span className="font-semibold">⚡ Speed</span>
+                    <span className="font-bold">{Math.round(gameState.player.speed * 100)}%</span>
+                  </div>
+                  <Progress value={gameState.player.speed * 100} className="h-3 bg-white/30" />
+                </div>
+                <div className="text-center bg-gradient-to-r from-yellow-400 to-orange-500 text-black py-4 rounded-xl font-black text-2xl drop-shadow">
                        {gameState.player.score}
-                    </div>
-                  </CardContent>
-                </Card>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Controls */}
-                <Card className="bg-black/60 border-white/20 shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="text-white text-xl font-bold drop-shadow-lg">🎮 Controls</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-white text-sm space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white/20 px-2 py-1 rounded font-mono">↑↓←→</div>
-                      <span>Arrow keys to move</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white/20 px-2 py-1 rounded font-mono">WASD</div>
-                      <span>Alternative movement</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="bg-white/20 px-2 py-1 rounded">🖱️</div>
-                      <span>Click maze to move</span>
-                    </div>
-                    <div className="border-t border-white/30 pt-3 mt-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-4 h-4 bg-green-500 rounded"></div>
-                        <span>Goal (reach this)</span>
-                      </div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-                        <span>Avoid ghosts</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 bg-red-600 rounded"></div>
-                        <span>Navigate obstacles</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* Controls */}
+            <Card className="bg-black/60 border-white/20 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white text-xl font-bold drop-shadow-lg">🎮 Controls</CardTitle>
+              </CardHeader>
+              <CardContent className="text-white text-sm space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="bg-white/20 px-2 py-1 rounded font-mono">↑↓←→</div>
+                  <span>Arrow keys to move</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="bg-white/20 px-2 py-1 rounded font-mono">WASD</div>
+                  <span>Alternative movement</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="bg-white/20 px-2 py-1 rounded">🖱️</div>
+                  <span>Click maze to move</span>
+                </div>
+                <div className="border-t border-white/30 pt-3 mt-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-4 h-4 bg-green-500 rounded"></div>
+                    <span>Goal (reach this)</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+                    <span>Avoid ghosts</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-600 rounded"></div>
+                    <span>Navigate obstacles</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-                {/* Viewer Actions */}
-                <Card className="bg-purple-400/30 backdrop-blur-sm border-purple-400/50 shadow-xl">
-                  <CardHeader>
-                    <CardTitle className="text-white flex items-center gap-2 text-xl font-bold drop-shadow-lg">
-                      <Zap className="h-5 w-5 text-yellow-400" />
-                      Viewer Sabotage
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-white text-sm">
-                    <div className="mb-3 drop-shadow">👻 Viewers can sabotage you!</div>
-                    <div className="bg-black/40 p-3 rounded-lg border border-white/20">
-                      <div className="text-xs text-white/80 mb-1">Share room ID:</div>
-                      <div className="font-mono bg-white/20 px-2 py-1 rounded text-center text-yellow-400 font-bold drop-shadow">
-                        {roomId}
-                      </div>
-                    </div>
-                    <div className="mt-3 text-xs text-white/80 drop-shadow">
-                      Viewers can slow you down, spawn ghosts, or block your path!
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            {/* Viewer Actions */}
+            <Card className="bg-purple-400/30 backdrop-blur-sm border-purple-400/50 shadow-xl">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2 text-xl font-bold drop-shadow-lg">
+                  <Zap className="h-5 w-5 text-yellow-400" />
+                  Viewer Sabotage
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-white text-sm">
+                <div className="mb-3 drop-shadow">👻 Viewers can sabotage you!</div>
+                <div className="bg-black/40 p-3 rounded-lg border border-white/20">
+                  <div className="text-xs text-white/80 mb-1">Share room ID:</div>
+                  <div className="font-mono bg-white/20 px-2 py-1 rounded text-center text-yellow-400 font-bold drop-shadow">
+                    {roomId}
+                  </div>
+                </div>
+                <div className="mt-3 text-xs text-white/80 drop-shadow">
+                  Viewers can slow you down, spawn ghosts, or block your path!
+                </div>
+              </CardContent>
+            </Card>
+          </div>
             </div>
           </div>
         </div>

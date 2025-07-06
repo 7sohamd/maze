@@ -124,6 +124,23 @@ export default function LandingPage() {
           </div>
         </div>
       )}
+
+      {/* Face GIF at top right with blend mode */}
+      <div style={{ position: 'fixed', top: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
+        <img
+          src="/face.gif"
+          alt="Face"
+          style={{
+            width: '260px',
+            height: 'auto',
+            mixBlendMode: 'screen',
+            opacity: 0.95,
+            display: 'block',
+            maxWidth: '45vw',
+            minWidth: '160px',
+          }}
+        />
+      </div>
     </>
   )
 }
