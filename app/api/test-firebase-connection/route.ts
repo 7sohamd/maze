@@ -16,8 +16,8 @@ export async function GET() {
       message: "Firebase connection working",
       collections: snapshot.docs.length,
       env: {
-        apiKey: process.env.FIREBASE_API_KEY ? "Present" : "Missing",
-        projectId: process.env.FIREBASE_PROJECT_ID ? "Present" : "Missing"
+        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? "Present" : "Missing",
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? "Present" : "Missing"
       }
     })
   } catch (error) {
@@ -26,8 +26,8 @@ export async function GET() {
       success: false, 
       error: error instanceof Error ? error.message : "Unknown error",
       env: {
-        apiKey: process.env.FIREBASE_API_KEY ? "Present" : "Missing",
-        projectId: process.env.FIREBASE_PROJECT_ID ? "Present" : "Missing"
+        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? "Present" : "Missing",
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? "Present" : "Missing"
       }
     }, { status: 500 })
   }
