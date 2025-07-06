@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { ArrowLeft, Users, Heart, Zap, Copy, Share2, Check } from "lucide-react"
 import { db } from "@/lib/firebase"
-import { doc, setDoc } from "firebase/firestore"
+import { doc, setDoc, collection, query, orderBy, limit, getDocs, increment } from "firebase/firestore"
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth'
 
 interface GameState {
   player: {
@@ -58,6 +59,11 @@ export default function GamePage() {
   const isProcessingMovementRef = useRef(false)
   const [selectedMode, setSelectedMode] = useState<string>("")
   const difficulty = selectedMode || searchParams?.get('difficulty') || 'medium'
+  
+  // Leaderboard state (must be declared before any useEffect that uses it)
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  // User state (must be declared before any useEffect that uses it)
+  const [user, setUser] = useState<any>(null);
   
   // Proper hit effect management
   const triggerHitEffect = useCallback(() => {
@@ -1231,18 +1237,94 @@ export default function GamePage() {
     }
   }, []);
 
+  // Leaderboard state
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      const q = query(collection(db, 'leaderboard'), orderBy('points', 'desc'), limit(10));
+      const snapshot = await getDocs(q);
+      setLeaderboard(snapshot.docs.map(doc => doc.data()));
+    };
+    fetchLeaderboard();
+  }, []);
+
+  // Auth state
+  useEffect(() => {
+    const auth = getAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsubscribe();
+  }, []);
+
+  const signInWithGoogle = async () => {
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  };
+
+  const handleSignOut = async () => {
+    const auth = getAuth();
+    await signOut(auth);
+  };
+
+  // Award points to user on win
+  const awardPoints = async (difficulty: string, user: any) => {
+    if (!user) return;
+    let points = 0;
+    if (difficulty === "easy") points = 25;
+    else if (difficulty === "medium") points = 50;
+    else if (difficulty === "hard") points = 100;
+
+    await setDoc(
+      doc(db, "leaderboard", user.uid),
+      {
+        displayName: user.displayName,
+        email: user.email,
+        photoURL: user.photoURL,
+        points: increment(points),
+      },
+      { merge: true }
+    );
+  };
+
+  // Award points and refresh leaderboard on win
+  useEffect(() => {
+    if (gameState?.gameStatus === "won" && user) {
+      awardPoints(difficulty, user).then(() => {
+        // Refresh leaderboard after awarding points
+        const fetchLeaderboard = async () => {
+          const q = query(collection(db, 'leaderboard'), orderBy('points', 'desc'), limit(10));
+          const snapshot = await getDocs(q);
+          setLeaderboard(snapshot.docs.map(doc => doc.data()));
+        };
+        fetchLeaderboard();
+      });
+    }
+  }, [gameState?.gameStatus, user]);
+
+  if (!user) {
+    return (
+      <div className="min-h-screen p-4 flex flex-col items-center justify-center" style={{ backgroundImage: `url('/arcade.gif')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+        <div className="absolute inset-0 bg-black/70 z-0" />
+        <div className="relative z-10 flex flex-col items-center gap-8">
+          <div className="text-white text-4xl font-bold mb-4">Sign in to Play</div>
+          <Button onClick={signInWithGoogle} className="text-lg px-8 py-3 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-xl shadow-lg">
+            Sign in with Google
+          </Button>
+        </div>
+      </div>
+    );
+  }
   if (!walletAddress) {
     return (
       <div className="min-h-screen p-4 flex flex-col items-center justify-center" style={{ backgroundImage: `url('/arcade.gif')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
         <div className="absolute inset-0 bg-black/70 z-0" />
         <div className="relative z-10 flex flex-col items-center gap-8">
-          <div className="text-white text-4xl font-regular mb-4">Choose Game Mode</div>
+          <div className="text-white text-4xl font-bold mb-4">Choose Game Mode</div>
           <div className="flex gap-4 mb-6">
             {['easy', 'medium', 'hard'].map(mode => (
               <button
                 key={mode}
                 onClick={() => setSelectedMode(mode)}
-                className={`px-6 py-3 rounded-xl text-lg font-thin border-1 transition-all duration-150 ${selectedMode === mode ? 'bg-yellow-400 text-black border-yellow-500 scale-105' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-black hover:border-yellow-500'}`}
+                className={`px-6 py-3 rounded-xl text-lg font-semibold border-2 transition-all duration-150 ${selectedMode === mode ? 'bg-yellow-400 text-black border-yellow-500 scale-105' : 'bg-black/40 text-white border-white/30 hover:bg-yellow-400 hover:text-black hover:border-yellow-500'}`}
               >
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>
@@ -1299,220 +1381,262 @@ export default function GamePage() {
     >
       {/* Overlay for readability */}
       <div className="absolute inset-0 bg-black/70 pointer-events-none z-0" />
-      <div className="relative z-10 max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <Button
-            onClick={() => router.push("/")}
-            variant="outline"
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Home
-          </Button>
-          
-          <div className="text-white text-2xl font-bold flex items-center gap-3">
-            <div className={`px-3 py-1 rounded-full font-bold text-sm ${
-              difficulty === 'easy' ? 'bg-green-500 text-white' :
-              difficulty === 'medium' ? 'bg-yellow-500 text-black' :
-              'bg-red-500 text-white'
-            }`}>
-              {difficulty.toUpperCase()}
+      <div className="relative z-10 max-w-5xl mx-auto flex flex-col gap-8">
+        {/* Main Game Area and Sidebar */}
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-6">
+              <Button
+                onClick={() => router.push("/")}
+                variant="outline"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 backdrop-blur-sm"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Home
+              </Button>
+              
+              <div className="text-white text-2xl font-bold flex items-center gap-3">
+                <div className={`px-3 py-1 rounded-full font-bold text-sm ${
+                  difficulty === 'easy' ? 'bg-green-500 text-white' :
+                  difficulty === 'medium' ? 'bg-yellow-500 text-black' :
+                  'bg-red-500 text-white'
+                }`}>
+                  {difficulty.toUpperCase()}
+                </div>
+                <span className="text-white/80">Room:</span>
+                <span className="bg-white/10 px-3 py-1 rounded-lg font-mono">{roomId}</span>
+                <button
+                  onClick={handleCopyRoomCode}
+                  title="Copy Room Code"
+                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  {copied ? (
+                    <Check className="h-5 w-5 text-green-400" />
+                  ) : (
+                    <Copy className="h-5 w-5 text-white/70" />
+                  )}
+                </button>
+                <button
+                  onClick={handleShareInvite}
+                  title="Share Invite Link"
+                  className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <Share2 className="h-5 w-5 text-white/70" />
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
+                  <Users className="h-4 w-4" />
+                  <span className="font-semibold">
+                    {gameState.viewers !== undefined ? gameState.viewers : 0} viewers
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
+                  ⏰ {minutes}:{seconds.toString().padStart(2, "0")}
+                </div>
+                <div className="flex items-center gap-2 text-green-400 font-bold text-lg bg-black/30 px-4 py-2 rounded-full">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  {ping !== null ? `${ping} ms` : "-"}
+                </div>
+              </div>
             </div>
-            <span className="text-white/80">Room:</span>
-            <span className="bg-white/10 px-3 py-1 rounded-lg font-mono">{roomId}</span>
-            <button
-              onClick={handleCopyRoomCode}
-              title="Copy Room Code"
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              {copied ? (
-                <Check className="h-5 w-5 text-green-400" />
-              ) : (
-                <Copy className="h-5 w-5 text-white/70" />
-              )}
-            </button>
-            <button
-              onClick={handleShareInvite}
-              title="Share Invite Link"
-              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-            >
-              <Share2 className="h-5 w-5 text-white/70" />
-            </button>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-white/90 bg-white/10 px-4 py-2 rounded-full">
-              <Users className="h-4 w-4" />
-              <span className="font-semibold">
-                {gameState.viewers !== undefined ? gameState.viewers : 0} viewers
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-yellow-400 font-bold text-xl bg-black/30 px-4 py-2 rounded-full">
-              ⏰ {minutes}:{seconds.toString().padStart(2, "0")}
-            </div>
-            <div className="flex items-center gap-2 text-green-400 font-bold text-lg bg-black/30 px-4 py-2 rounded-full">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-              {ping !== null ? `${ping} ms` : "-"}
+
+            {/* Win/Lose Popup */}
+            {showCelebration && (
+              <CelebrationUI onClose={() => {
+                setShowCelebration(false)
+                router.push("/")
+              }} />
+            )}
+            
+            {showLose && (
+              <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/80 backdrop-blur-sm">
+                <div className="bg-gradient-to-br from-red-500 to-red-700 text-white p-12 rounded-3xl shadow-2xl text-center border-4 border-red-300 animate-pulse">
+                  <div className="text-6xl mb-4">💀</div>
+                  <div className="text-4xl font-black mb-4">GAME OVER</div>
+                  <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
+                  <div className="text-lg mb-6">Better luck next time!</div>
+                  <Button 
+                    onClick={() => router.push("/")} 
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
+                  >
+                    🎮 Try Again
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="grid lg:grid-cols-4 gap-8">
+              {/* Game Canvas */}
+              <div className="lg:col-span-3">
+                <Card className="bg-black/60 border-white/20 shadow-2xl">
+                  <CardContent className="p-6">
+                    <div className="text-center mb-4">
+                      <h2 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">🎮 Game Arena</h2>
+                      <p className="text-white/90 text-sm drop-shadow">Click on the maze or use arrow keys/WASD to move</p>
+                    </div>
+                    <div className="flex justify-center overflow-auto">
+                      <div className="inline-block">
+                        <canvas
+                          ref={canvasRef}
+                          onClick={handleCanvasClick}
+                          className="border-4 border-yellow-400 rounded-2xl shadow-2xl cursor-pointer bg-black max-w-full"
+                          style={{ imageRendering: "pixelated" }}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {gameState.gameStatus !== "playing" && (
+                  <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
+                    <CardContent className="p-8 text-center">
+                      <div className="text-3xl font-bold text-white mb-4 drop-shadow-lg">
+                        {gameState.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
+                      </div>
+                      <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState.player.score}</span></div>
+                      <Button 
+                        onClick={() => router.push("/")} 
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
+                      >
+                        🎮 Play Again
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-6">
+                {/* Player Stats */}
+                <Card className="bg-yellow-400/30 backdrop-blur-sm border-yellow-400/50 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2 text-xl font-black drop-shadow-lg">
+                      <div className="text-3xl">🟡</div>
+                      Player Stats
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div>
+                      <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
+                        <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
+                        <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
+                      </div>
+                      <Progress 
+                        value={gameState.player.health} 
+                        className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
+                        <span className="font-semibold">⚡ Speed</span>
+                        <span className="font-bold">{Math.round(gameState.player.speed * 100)}%</span>
+                      </div>
+                      <Progress value={gameState.player.speed * 100} className="h-3 bg-white/30" />
+                    </div>
+                    <div className="text-center bg-gradient-to-r from-yellow-400 to-orange-500 text-black py-4 rounded-xl font-black text-2xl drop-shadow">
+                       {gameState.player.score}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Controls */}
+                <Card className="bg-black/60 border-white/20 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white text-xl font-bold drop-shadow-lg">🎮 Controls</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-white text-sm space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-white/20 px-2 py-1 rounded font-mono">↑↓←→</div>
+                      <span>Arrow keys to move</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-white/20 px-2 py-1 rounded font-mono">WASD</div>
+                      <span>Alternative movement</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-white/20 px-2 py-1 rounded">🖱️</div>
+                      <span>Click maze to move</span>
+                    </div>
+                    <div className="border-t border-white/30 pt-3 mt-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-4 h-4 bg-green-500 rounded"></div>
+                        <span>Goal (reach this)</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-4 h-4 bg-red-500 rounded-full"></div>
+                        <span>Avoid ghosts</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-red-600 rounded"></div>
+                        <span>Navigate obstacles</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Viewer Actions */}
+                <Card className="bg-purple-400/30 backdrop-blur-sm border-purple-400/50 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-white flex items-center gap-2 text-xl font-bold drop-shadow-lg">
+                      <Zap className="h-5 w-5 text-yellow-400" />
+                      Viewer Sabotage
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-white text-sm">
+                    <div className="mb-3 drop-shadow">👻 Viewers can sabotage you!</div>
+                    <div className="bg-black/40 p-3 rounded-lg border border-white/20">
+                      <div className="text-xs text-white/80 mb-1">Share room ID:</div>
+                      <div className="font-mono bg-white/20 px-2 py-1 rounded text-center text-yellow-400 font-bold drop-shadow">
+                        {roomId}
+                      </div>
+                    </div>
+                    <div className="mt-3 text-xs text-white/80 drop-shadow">
+                      Viewers can slow you down, spawn ghosts, or block your path!
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Win/Lose Popup */}
-        {showCelebration && (
-          <CelebrationUI onClose={() => {
-            setShowCelebration(false)
-            router.push("/")
-          }} />
-        )}
-        
-        {showLose && (
-          <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/80 backdrop-blur-sm">
-            <div className="bg-gradient-to-br from-red-500 to-red-700 text-white p-12 rounded-3xl shadow-2xl text-center border-4 border-red-300 animate-pulse">
-              <div className="text-6xl mb-4">💀</div>
-              <div className="text-4xl font-black mb-4">GAME OVER</div>
-              <div className="text-xl mb-2">Final Score: <span className="font-bold text-yellow-300">{gameState.player.score}</span></div>
-              <div className="text-lg mb-6">Better luck next time!</div>
-              <Button 
-                onClick={() => router.push("/")} 
-                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-4 px-8 text-xl rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
-              >
-                🎮 Try Again
-              </Button>
+        {/* Leaderboard Section - aligned with game area and sidebar */}
+        <div className="w-full mt-12 flex justify-center">
+          <div className="w-full max-w-5xl">
+            <div className="bg-black/80 rounded-2xl shadow-2xl p-8 border border-yellow-400/40">
+              <div className="text-yellow-400 text-2xl font-bold mb-6 flex items-center gap-2">
+                🏆 Leaderboard
+              </div>
+              <ol className="space-y-3">
+                {leaderboard.length === 0 && (
+                  <li className="text-white/70 text-center">No scores yet.</li>
+                )}
+                {leaderboard.map((user: any, i: number) => (
+                  <li key={user.email || i} className="flex items-center gap-3 bg-white/10 rounded-lg px-4 py-3">
+                    <span className="text-lg font-bold text-yellow-300 w-6 text-center">{i + 1}</span>
+                    {user.photoURL && typeof user.photoURL === 'string' && user.photoURL.startsWith('http') ? (
+                      <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full border-2 border-yellow-400 object-cover" />
+                    ) : (
+                      <span className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-black font-bold">{user.displayName?.[0] || '?'}</span>
+                    )}
+                    <span className="flex-1 truncate text-white font-semibold">{user.displayName || user.email}</span>
+                    <span className="text-yellow-200 font-mono text-lg">{user.points}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
-        )}
-
-        <div className="grid lg:grid-cols-4 gap-8">
-          {/* Game Canvas */}
-          <div className="lg:col-span-3">
-            <Card className="bg-black/60 border-white/20 shadow-2xl">
-              <CardContent className="p-6">
-                <div className="text-center mb-4">
-                  <h2 className="text-2xl font-bold text-white mb-2 drop-shadow-lg">🎮 Game Arena</h2>
-                  <p className="text-white/90 text-sm drop-shadow">Click on the maze or use arrow keys/WASD to move</p>
-                </div>
-                <div className="flex justify-center overflow-auto">
-                  <div className="inline-block">
-                    <canvas
-                      ref={canvasRef}
-                      onClick={handleCanvasClick}
-                      className="border-4 border-yellow-400 rounded-2xl shadow-2xl cursor-pointer bg-black max-w-full"
-                      style={{ imageRendering: "pixelated" }}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {gameState.gameStatus !== "playing" && (
-              <Card className="bg-black/60 border-white/20 mt-6 shadow-2xl">
-                <CardContent className="p-8 text-center">
-                  <div className="text-3xl font-bold text-white mb-4 drop-shadow-lg">
-                    {gameState.gameStatus === "won" ? "🎉 You Won!" : "💀 Game Over"}
-                  </div>
-                  <div className="text-gray-200 mb-6 text-lg drop-shadow">Final Score: <span className="font-bold text-yellow-400">{gameState.player.score}</span></div>
-                  <Button 
-                    onClick={() => router.push("/")} 
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200"
-                  >
-                    🎮 Play Again
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Player Stats */}
-            <Card className="bg-yellow-400/30 backdrop-blur-sm border-yellow-400/50 shadow-xl">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2 text-xl font-black drop-shadow-lg">
-                  <div className="text-3xl">🟡</div>
-                  Player Stats
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
-                    <span className={`font-semibold ${playerHit ? 'text-red-400 animate-pulse' : ''}`}>❤️ Health</span>
-                    <span className={`font-bold ${playerHit ? 'text-red-400' : ''}`}>{gameState.player.health}/100</span>
-                  </div>
-                  <Progress 
-                    value={gameState.player.health} 
-                    className={`h-3 ${playerHit ? 'bg-red-500/50' : 'bg-white/30'}`} 
-                  />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm text-white mb-2 drop-shadow">
-                    <span className="font-semibold">⚡ Speed</span>
-                    <span className="font-bold">{Math.round(gameState.player.speed * 100)}%</span>
-                  </div>
-                  <Progress value={gameState.player.speed * 100} className="h-3 bg-white/30" />
-                </div>
-                <div className="text-center bg-gradient-to-r from-yellow-400 to-orange-500 text-black py-4 rounded-xl font-black text-2xl drop-shadow">
-                  🏆 {gameState.player.score}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Controls */}
-            <Card className="bg-black/60 border-white/20 shadow-xl">
-              <CardHeader>
-                <CardTitle className="text-white text-xl font-bold drop-shadow-lg">🎮 Controls</CardTitle>
-              </CardHeader>
-              <CardContent className="text-white text-sm space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 px-2 py-1 rounded font-mono">↑↓←→</div>
-                  <span>Arrow keys to move</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 px-2 py-1 rounded font-mono">WASD</div>
-                  <span>Alternative movement</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 px-2 py-1 rounded">🖱️</div>
-                  <span>Click maze to move</span>
-                </div>
-                <div className="border-t border-white/30 pt-3 mt-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-4 h-4 bg-green-500 rounded"></div>
-                    <span>Goal (reach this)</span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-4 h-4 bg-red-500 rounded-full"></div>
-                    <span>Avoid ghosts</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 bg-red-600 rounded"></div>
-                    <span>Navigate obstacles</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Viewer Actions */}
-            <Card className="bg-purple-400/30 backdrop-blur-sm border-purple-400/50 shadow-xl">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2 text-xl font-bold drop-shadow-lg">
-                  <Zap className="h-5 w-5 text-yellow-400" />
-                  Viewer Sabotage
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-white text-sm">
-                <div className="mb-3 drop-shadow">👻 Viewers can sabotage you!</div>
-                <div className="bg-black/40 p-3 rounded-lg border border-white/20">
-                  <div className="text-xs text-white/80 mb-1">Share room ID:</div>
-                  <div className="font-mono bg-white/20 px-2 py-1 rounded text-center text-yellow-400 font-bold drop-shadow">
-                    {roomId}
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-white/80 drop-shadow">
-                  Viewers can slow you down, spawn ghosts, or block your path!
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        </div>
+        {/* User Info Bar - fixed top right */}
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-black/80 px-4 py-2 rounded-xl shadow-lg border border-yellow-400/30 backdrop-blur-md">
+          {user.photoURL && typeof user.photoURL === 'string' && user.photoURL.startsWith('http') ? (
+            <img src={user.photoURL} alt="avatar" className="w-8 h-8 rounded-full border-2 border-yellow-400 object-cover" />
+          ) : (
+            <span className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-black font-bold">{user.displayName?.[0] || '?'}</span>
+          )}
+          <span className="text-white font-semibold max-w-[120px] truncate">{user.displayName || user.email}</span>
+          <Button onClick={handleSignOut} size="sm" className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-3 py-1 rounded-lg ml-2">Sign Out</Button>
         </div>
       </div>
     </div>
